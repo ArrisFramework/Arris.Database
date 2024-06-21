@@ -34,6 +34,8 @@
         "ajur-media/fluentpdo": "^1.0.3"
     },
     "autoload": {
-        "Arris\\": ["sources", "interfaces"]
+        "psr-4": {
+            "Arris\\": ["sources", "interfaces"]
+        }
     }
 }
