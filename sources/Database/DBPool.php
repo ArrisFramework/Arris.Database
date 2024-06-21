@@ -5,26 +5,27 @@ namespace Arris\Database;
 use Exception;
 use PDO;
 
-class DBPool {
+class DBPool implements DBPoolInterface {
+
     /**
      * @var int
      */
-    private $pool_max_size = 0;
+    private int $pool_max_size = 0;
 
     /**
      * @var array
      */
-    private $pool = [];
+    private array $pool = [];
 
     /**
      * @var string
      */
-    private $db_table;
+    private string $db_table;
 
     /**
      * @var array
      */
-    private $db_columns;
+    private array $db_columns = [];
 
     /**
      * @var PDO
@@ -34,7 +35,7 @@ class DBPool {
     /**
      * DBPool constructor
      *
-     * @param PDO $pdo_connection
+     * @param PDO|DBWrapper $pdo_connection
      * @param int $pool_max_size
      * @param string $db_table
      * @param array $db_columns
@@ -48,6 +49,7 @@ class DBPool {
     }
 
     /**
+     *
      *
      * @param array $dataset
      * @throws Exception
@@ -84,21 +86,21 @@ class DBPool {
         }
 
         // Get column list
-        $columnList = array_keys($rows[0]);
-        $numColumns = count($columnList);
-        $columnListString = implode(",", $columnList);
+        $columnList = \array_keys($rows[0]);
+        $numColumns = \count($columnList);
+        $columnListString = \implode(",", $columnList);
 
         // Generate pdo param placeholders
         $placeHolders = [];
 
         foreach($rows as $row) {
-            $placeHolders[] = "(?".str_repeat(",?", count($db_columns) - 1). ")";
+            $placeHolders[] = "(?". \str_repeat(",?", \count($db_columns) - 1). ")";
         }
 
-        $placeHolders = implode(",", $placeHolders);
+        $placeHolders = \implode(",", $placeHolders);
 
         // Construct the query
-        $sql = "INSERT INTO {$tableName} ({$columnListString}) VALUES {$placeHolders}";
+        $sql = "INSERT INTO {$tableName} ( {$columnListString} ) VALUES {$placeHolders}";
         $stmt = $pdo_connection->prepare($sql);
 
         $j = 1;

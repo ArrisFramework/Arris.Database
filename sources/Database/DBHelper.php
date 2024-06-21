@@ -2,7 +2,7 @@
 
 namespace Arris\Database;
 
-class DBHelper
+class DBHelper implements DBHelperInterface
 {
     /**
      * Строит INSERT-запрос на основе массива данных для указанной таблицы.
@@ -13,33 +13,35 @@ class DBHelper
      * @param $dataset      -- передается по ссылке, мутабелен
      * @return string       -- результирующая строка запроса
      */
-    public static function makeInsertQuery(string $table, &$dataset):string
+    public static function makeInsertQuery(string $table, &$dataset, bool $pretty = true):string
     {
         if (empty($dataset)) {
             return "INSERT INTO {$table} () VALUES (); ";
         }
 
-        $set = [];
+        $pretty = $pretty ? "\r\n" : '';
+
+        $insert_fields = [];
 
         $query = "INSERT INTO {$table} SET ";
 
         foreach ($dataset as $index => $value) {
-            if (strtoupper(trim($value)) === 'NOW()') {
-                $set[] = "\r\n `{$index}` = NOW()";
+            if (\strtoupper(\trim($value)) === 'NOW()') {
+                $insert_fields[] = "{$pretty} `{$index}` = NOW()";
                 unset($dataset[ $index ]);
                 continue;
             }
 
-            if (strtoupper(trim($value)) === 'UUID()') {
-                $set[] = "\r\n {$index} = UUID()";
+            if (\strtoupper(\trim($value)) === 'UUID()') {
+                $insert_fields[] = "\r\n {$index} = UUID()";
                 unset($dataset[$index]);
                 continue;
             }
 
-            $set[] = "\r\n `{$index}` = :{$index}";
+            $insert_fields[] = "{$pretty} `{$index}` = :{$index}";
         }
 
-        $query .= implode(', ', $set) . ' ;';
+        $query .= \implode(', ', $insert_fields) . ' ;';
 
         return $query;
     }
@@ -50,69 +52,81 @@ class DBHelper
      * @param string $table
      * @param $dataset
      * @param $where_condition
+     * @param bool $pretty
      * @return bool|string
      */
-    public static function makeUpdateQuery(string $table, &$dataset, $where_condition):string
+    public static function makeUpdateQuery(string $table, &$dataset, $where_condition, bool $pretty = true):string
     {
-        $crlf = ''; // '\r\n';
-        $set = [];
-
         if (empty($dataset)) {
             return false;
         }
 
+        $set = [];
+        $pretty = $pretty ? "\r\n" : '';
+
         $query = "UPDATE `{$table}` SET";
 
         foreach ($dataset as $index => $value) {
-            if (strtoupper(trim($value)) === 'NOW()') {
-                $set[] = "{$crlf} `{$index}` = NOW()";
+            if (\strtoupper(\trim($value)) === 'NOW()') {
+                $set[] = "{$pretty} `{$index}` = NOW()";
                 unset($dataset[ $index ]);
                 continue;
             }
 
-            if (strtoupper(trim($value)) === 'UUID()') {
-                $set[] = "\r\n {$index} = UUID()";
+            if (\strtoupper(\trim($value)) === 'UUID()') {
+                $set[] = "{$pretty} {$index} = UUID()";
                 unset($dataset[$index]);
                 continue;
             }
 
-            $set[] = "{$crlf}`{$index}` = :{$index}";
+            $set[] = "{$pretty} `{$index}` = :{$index}";
         }
 
-        $query .= implode(', ', $set);
+        $query .= \implode(', ', $set);
 
-        if (is_array($where_condition)) {
-            $where_condition = key($where_condition) . ' = ' . current($where_condition);
+        if (\is_array($where_condition)) {
+            $where_condition = \key($where_condition) . ' = ' . \current($where_condition);
         }
-        if ( is_string($where_condition ) && !strpos($where_condition, 'WHERE')) {
-            $where_condition = " WHERE {$where_condition}";
+
+        if (\is_string($where_condition ) && !\strpos($where_condition, 'WHERE')) {
+            $where_condition = " WHERE {$where_condition} ";
         }
-        if (is_null($where_condition)) {
+
+        if (\is_null($where_condition)) {
             $where_condition = '';
         }
 
-        $query .= " {$crlf} $where_condition ;";
+        $query .= " {$pretty} {$where_condition} ;";
 
         return $query;
     }
 
-    public static function makeReplaceQuery(string $table, array &$dataset, string $where = '')
+    /**
+     * @param string $table
+     * @param array $dataset
+     * @param string $where
+     * @param bool $pretty
+     * @return false|string
+     */
+    public static function makeReplaceQuery(string $table, array &$dataset, string $where = '', bool $pretty = true)
     {
+        if (empty($dataset)) {
+            return false;
+        }
         $fields = [];
 
-        if (empty($dataset))
-            return false;
+        $pretty = $pretty ? "\r\n" : '';
 
         $query = "REPLACE `{$table}` SET ";
 
         foreach ($dataset as $index => $value) {
-            if (strtoupper(trim($value)) === 'NOW()') {
+            if (\strtoupper(\trim($value)) === 'NOW()') {
                 $fields[] = "`{$index}` = NOW()";
                 unset($dataset[ $index ]);
                 continue;
             }
 
-            if (strtoupper(trim($value)) === 'UUID()') {
+            if (\strtoupper(\trim($value)) === 'UUID()') {
                 $fields[] = " {$index} = UUID() ";
                 unset($dataset[$index]);
                 continue;
@@ -121,31 +135,33 @@ class DBHelper
             $fields[] = " `{$index}` = :{$index} ";
         }
 
-        $query .= implode(', ', $fields);
+        $query .= \implode(', ', $fields);
 
-        $query .= " \r\n" . $where . " ;";
+        $query .= " {$pretty} {$where} ;";
 
         return $query;
     }
 
     /**
+     * Не поддерживает NOW() и UUID() в запросах
+     *
      * @param string $table
      * @param array $dataset
      * @return string
      */
     public static function buildReplaceQuery(string $table, array $dataset):string
     {
-        $dataset_keys = array_keys($dataset);
+        $dataset_keys = \array_keys($dataset);
 
         $query = "REPLACE INTO `{$table}` (";
 
-        $query.= implode(', ', array_map(function ($i){
+        $query.= \implode(', ', \array_map(function ($i){
             return "`{$i}`";
         }, $dataset_keys));
 
         $query.= " ) VALUES ( ";
 
-        $query.= implode(', ', array_map(function ($i){
+        $query.= \implode(', ', \array_map(function ($i){
             return ":{$i}";
         }, $dataset_keys));
 
@@ -164,9 +180,9 @@ class DBHelper
     {
         $query = "UPDATE `{$table}` SET ";
 
-        $query.= implode(', ', array_map(function ($key, $value){
+        $query.= \implode(', ', \array_map(function ($key, $value){
             return "\r\n`{$key}` = :{$key}";
-        }, array_keys($dataset), $dataset));
+        }, \array_keys($dataset), $dataset));
 
         $where
             = !empty($where_condition)
@@ -195,22 +211,22 @@ class DBHelper
     {
         $query = "REPLACE INTO `{$table}` (";
 
-        $dataset_keys = array_keys($dataset);
+        $dataset_keys = \array_keys($dataset);
 
-        $query .= implode(', ', array_map( static function ($i){
+        $query .= \implode(', ', \array_map( static function ($i){
             return "`{$i}`";
         }, $dataset_keys));
 
         $query .= " ) VALUES ( ";
 
-        $query .= implode(', ', array_map(static function ($i) use ($mva_attributes, $dataset){
-            return in_array($i, $mva_attributes) ? "({$dataset[$i]})" : ":{$i}";
+        $query .= \implode(', ', \array_map(static function ($i) use ($mva_attributes, $dataset){
+            return \in_array($i, $mva_attributes) ? "({$dataset[$i]})" : ":{$i}";
         }, $dataset_keys));
 
         $query .= " ) ";
 
-        $new_dataset = array_filter($dataset, static function ($value, $key) use ($mva_attributes) {
-            return !in_array($key, $mva_attributes);
+        $new_dataset = \array_filter($dataset, static function ($value, $key) use ($mva_attributes) {
+            return !\in_array($key, $mva_attributes);
         }, ARRAY_FILTER_USE_BOTH);
 
         return [

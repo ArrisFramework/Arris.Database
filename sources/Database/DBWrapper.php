@@ -2,9 +2,10 @@
 
 namespace Arris\Database;
 
-use \PDO;
+use PDO;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
+use stdClass;
 
 /**
  * @method int|false            exec(string $statement = '')
@@ -221,14 +222,24 @@ class DBWrapper
 
     /**
      * @param int $precision
-     * @return array
+     * @return array{total_queries:int,total_time:string}
      */
-    public function getStats(int $precision = 6): array
+    public function getStats(int $precision = 6)
     {
         return [
             'total_queries' =>  $this->config->total_queries,
             'total_time'    =>  $this->config->formatTime($this->config->total_time, $precision)
         ];
+
+        /*$object = (new class() extends stdClass {
+            public int    $total_queries;
+            public string  $total_time;
+        });
+        $object->total_queries = $this->config->total_queries;
+        $object->total_time = $this->config->formatTime($this->config->total_time, $precision);
+
+        return $object;
+        */
     }
 
     private function updateLastState($args)

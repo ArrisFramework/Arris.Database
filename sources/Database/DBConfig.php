@@ -6,10 +6,10 @@ use Psr\Log\AbstractLogger;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
-class DBConfig
+class DBConfig implements DBConfigInterface
 {
-    const DEFAULT_CHARSET = 'utf8';
-    const DEFAULT_CHARSET_COLLATE = 'utf8_general_ci';
+    public const DEFAULT_CHARSET = 'utf8';
+    public const DEFAULT_CHARSET_COLLATE = 'utf8_general_ci';
 
     /**
      * @var AbstractLogger
@@ -19,7 +19,7 @@ class DBConfig
     /**
      * @var array
      */
-    public $db_config;
+    public array $db_config;
 
     /**
      * @var string
@@ -54,7 +54,7 @@ class DBConfig
     /**
      * @var bool
      */
-    public $is_lazy;
+    public bool $is_lazy;
 
     /**
      * @var string
@@ -74,16 +74,22 @@ class DBConfig
     /**
      * @var int
      */
-    public $total_queries = 0;
+    public int $total_queries = 0;
 
     /**
      * @var float
      */
     public $total_time = 0;
 
+    /**
+     *
+     * @param array $connection_config
+     * @param array $options
+     * @param LoggerInterface|null $logger
+     */
     public function __construct(array $connection_config, array $options = [], LoggerInterface $logger = null)
     {
-        $this->logger = is_null($logger) ? new NullLogger() : $logger;
+        $this->logger = \is_null($logger) ? new NullLogger() : $logger;
 
         if (empty($connection_config)) {
             $this->logger->emergency("[DBWrapper Error] Connection config is empty");
@@ -91,35 +97,38 @@ class DBConfig
         }
 
         $this->db_config = $connection_config;
-        $this->driver   = $this->db_config['driver'] ?? 'mysql';
-        $this->hostname = $this->db_config['hostname'] ?? '127.0.0.1';
-        $this->port     = $this->db_config['port'] ?? 3306;
-        $this->username = $this->db_config['username'] ?? 'root';
-        $this->password = $this->db_config['password'];
-        $this->database = $this->db_config['database'];
+        $this->driver   = $connection_config['driver'] ?? 'mysql';
+        $this->hostname = $connection_config['hostname'] ?? '127.0.0.1';
+        $this->port     = $connection_config['port'] ?? 3306;
+        $this->username = $connection_config['username'] ?? 'root';
+        $this->password = $connection_config['password'];
+        $this->database = $connection_config['database'];
         $this->is_lazy  = true;
 
-        if (!array_key_exists('charset', $this->db_config)) {
+        if (!\array_key_exists('charset', $this->db_config)) {
             $this->charset = self::DEFAULT_CHARSET;
-        } elseif (!is_null($this->db_config['charset'])) {
+        } elseif (!\is_null($this->db_config['charset'])) {
             $this->charset = $this->db_config['charset'];
         } else {
             $this->charset = null;
         }
 
-        if (!array_key_exists('charset_collate', $this->db_config)) {
+        if (!\array_key_exists('charset_collate', $this->db_config)) {
             $this->charset_collate = self::DEFAULT_CHARSET_COLLATE;
-        } elseif (!is_null($this->db_config['charset_collate'])) {
+        } elseif (!\is_null($this->db_config['charset_collate'])) {
             $this->charset_collate = $this->db_config['charset_collate'];
         } else {
             $this->charset_collate = null;
         }
 
         // ms
-        $this->slow_query_threshold = (array_key_exists('slow_query_threshold', $options)) ? (float)$options['slow_query_threshold'] : 1000;
+        $this->slow_query_threshold
+            = \array_key_exists('slow_query_threshold', $options)
+            ? (float)$options['slow_query_threshold']
+            : 1000;
 
-        // $this->is_lazy = array_key_exists('lazy', $options) ? (bool)$options['lazy'] : true;
-        $this->is_lazy = !array_key_exists('lazy', $options) || (bool)$options['lazy']; // if default = false -> remove '!' from first part.
+        $this->is_lazy
+            = !\array_key_exists('lazy', $options) || (bool)$options['lazy'];
 
         // microseconds
         $this->slow_query_threshold /= 1000;

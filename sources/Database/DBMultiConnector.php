@@ -9,10 +9,10 @@ use RuntimeException;
 class DBMultiConnector implements DBMultiConnectorInterface
 {
     /**
-     * \PDO instances
+     * PDO instances
      * @var array
      */
-    private static $_instances = [];
+    private static array $_instances = [];
 
     /**
      * Connection configs
@@ -24,12 +24,12 @@ class DBMultiConnector implements DBMultiConnectorInterface
      * Connection Loggers
      * @var array
      */
-    private static $_loggers = [];
+    private static array $_loggers = [];
 
     /**
      * DB constructor.
      * @param $suffix
-     * @throws \RuntimeException
+     * @throws RuntimeException
      */
     public function __construct($suffix = null)
     {
@@ -42,7 +42,7 @@ class DBMultiConnector implements DBMultiConnectorInterface
         $state_error_msg = '';
 
         try {
-            if (is_null($config)) {
+            if (\is_null($config)) {
                 throw new RuntimeException("Arris\DBMultiConnector class can't find configuration data for suffix {$suffix}" . PHP_EOL, 2);
             }
 
@@ -55,7 +55,7 @@ class DBMultiConnector implements DBMultiConnectorInterface
 
             switch ($db_driver) {
                 case 'mysql': {
-                    $dsl = sprintf("mysql:host=%s;port=%s;dbname=%s",
+                    $dsl = \sprintf("mysql:host=%s;port=%s;dbname=%s",
                         $db_host,
                         $db_port,
                         $db_name);
@@ -64,7 +64,7 @@ class DBMultiConnector implements DBMultiConnectorInterface
                     break;
                 }
                 case 'pgsql': {
-                    $dsl = sprintf("pgsql:host=%s;port=%d;dbname=%s;user=%s;password=%s",
+                    $dsl = \sprintf("pgsql:host=%s;port=%d;dbname=%s;user=%s;password=%s",
                         $db_host,
                         $db_port,
                         $db_name,
@@ -75,7 +75,7 @@ class DBMultiConnector implements DBMultiConnectorInterface
                     break;
                 }
                 case 'sqlite': {
-                    $dsl = sprintf("sqlite:%s", realpath($db_host));
+                    $dsl = \sprintf("sqlite:%s", realpath($db_host));
                     $dbh = new \PDO($dsl);
                     break;
                 }
@@ -85,9 +85,9 @@ class DBMultiConnector implements DBMultiConnectorInterface
                 }
             } // switch
 
-            if (isset($config['charset']) && !is_null($config['charset'])) {
+            if (isset($config['charset']) && !\is_null($config['charset'])) {
                 $sql = "SET NAMES {$config['charset']}";
-                if (isset($config['charset_collate']) && !is_null($config['charset_collate'])) {
+                if (isset($config['charset_collate']) && !\is_null($config['charset_collate'])) {
                     $sql .= " COLLATE {$config['charset_collate']}";
                 }
                 $dbh->exec($sql);
@@ -140,7 +140,7 @@ class DBMultiConnector implements DBMultiConnectorInterface
     {
         $config_key = self::getKey($suffix);
 
-        if (!is_array($config) || empty($config)) {
+        if (!\is_array($config) || empty($config)) {
             $message = __METHOD__
                 . ' can\'t use given data: '
                 . PHP_EOL . var_export($config, true) . PHP_EOL
@@ -188,7 +188,7 @@ class DBMultiConnector implements DBMultiConnectorInterface
     /**
      * Set connection config
      *
-     * @param $config
+     * @param array $config
      * @param null $suffix
      */
     public static function setConfig(array $config, $suffix = null)
@@ -235,7 +235,7 @@ class DBMultiConnector implements DBMultiConnectorInterface
     {
 
         $key = self::getKey($suffix);
-        return ( array_key_exists($key, self::$_instances) && self::$_instances[$key] !== null  );
+        return ( \array_key_exists($key, self::$_instances) && self::$_instances[$key] !== null  );
     }
 
     /**

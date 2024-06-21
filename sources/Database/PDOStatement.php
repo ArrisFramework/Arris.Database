@@ -71,7 +71,7 @@ class PDOStatement
     public function __call($method, $args)
     {
         $before_call = \microtime(true);
-        $result = \call_user_func_array(array($this->PDOStatement, $method), $args);
+        $result = \call_user_func_array([$this->PDOStatement, $method], $args);
         $after_call = \microtime(true);
         $time_consumed = $after_call - $before_call;
 

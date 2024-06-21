@@ -7,12 +7,12 @@ use RuntimeException;
 
 interface DBMultiConnectorInterface
 {
-    const MYSQL_ERROR_DUPLICATE_ENTRY = 1062;
+    public const MYSQL_ERROR_DUPLICATE_ENTRY = 1062;
 
     /**
      * DB constructor.
      * @param $suffix
-     * @throws \RuntimeException
+     * @throws RuntimeException
      */
     public function __construct($suffix = null);
 
