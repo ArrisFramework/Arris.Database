@@ -27,18 +27,18 @@ class DBHelper implements DBHelperInterface
 
         foreach ($dataset as $index => $value) {
             if (\strtoupper(\trim($value)) === 'NOW()') {
-                $insert_fields[] = "{$pretty} `{$index}` = NOW()";
+                $insert_fields[] = "{$pretty} {$index} = NOW()";
                 unset($dataset[ $index ]);
                 continue;
             }
 
             if (\strtoupper(\trim($value)) === 'UUID()') {
-                $insert_fields[] = "\r\n {$index} = UUID()";
+                $insert_fields[] = "{$pretty} {$index} = UUID()";
                 unset($dataset[$index]);
                 continue;
             }
 
-            $insert_fields[] = "{$pretty} `{$index}` = :{$index}";
+            $insert_fields[] = "{$pretty} {$index} = :{$index}";
         }
 
         $query .= \implode(', ', $insert_fields) . ' ;';
@@ -64,11 +64,11 @@ class DBHelper implements DBHelperInterface
         $set = [];
         $pretty = $pretty ? "\r\n" : '';
 
-        $query = "UPDATE `{$table}` SET";
+        $query = "UPDATE {$table} SET";
 
         foreach ($dataset as $index => $value) {
             if (\strtoupper(\trim($value)) === 'NOW()') {
-                $set[] = "{$pretty} `{$index}` = NOW()";
+                $set[] = "{$pretty} {$index} = NOW()";
                 unset($dataset[ $index ]);
                 continue;
             }
@@ -79,7 +79,7 @@ class DBHelper implements DBHelperInterface
                 continue;
             }
 
-            $set[] = "{$pretty} `{$index}` = :{$index}";
+            $set[] = "{$pretty} {$index} = :{$index}";
         }
 
         $query .= \implode(', ', $set);
@@ -117,11 +117,11 @@ class DBHelper implements DBHelperInterface
 
         $pretty = $pretty ? "\r\n" : '';
 
-        $query = "REPLACE `{$table}` SET ";
+        $query = "REPLACE {$table} SET ";
 
         foreach ($dataset as $index => $value) {
             if (\strtoupper(\trim($value)) === 'NOW()') {
-                $fields[] = "`{$index}` = NOW()";
+                $fields[] = "{$index} = NOW()";
                 unset($dataset[ $index ]);
                 continue;
             }
@@ -132,7 +132,7 @@ class DBHelper implements DBHelperInterface
                 continue;
             }
 
-            $fields[] = " `{$index}` = :{$index} ";
+            $fields[] = " {$index} = :{$index} ";
         }
 
         $query .= \implode(', ', $fields);
@@ -147,16 +147,19 @@ class DBHelper implements DBHelperInterface
      *
      * @param string $table
      * @param array $dataset
+     * @param bool $pretty
      * @return string
      */
-    public static function buildReplaceQuery(string $table, array $dataset):string
+    public static function buildReplaceQuery(string $table, array $dataset, bool $pretty = true):string
     {
+        $pretty = $pretty ? "\r\n" : '';
+
         $dataset_keys = \array_keys($dataset);
 
-        $query = "REPLACE INTO `{$table}` (";
+        $query = "REPLACE INTO {$table} (";
 
         $query.= \implode(', ', \array_map(function ($i){
-            return "`{$i}`";
+            return "{$i}";
         }, $dataset_keys));
 
         $query.= " ) VALUES ( ";
@@ -174,14 +177,17 @@ class DBHelper implements DBHelperInterface
      * @param string $table
      * @param array $dataset
      * @param null $where_condition - строка условия без WHERE ('x=0 AND y=0' ) или массив условий ['x=0', 'y=0']
+     * @param bool $pretty
      * @return string
      */
-    public static function buildUpdateQuery(string $table, array $dataset = [], $where_condition = null):string
+    public static function buildUpdateQuery(string $table, array $dataset = [], $where_condition = null, bool $pretty = true):string
     {
-        $query = "UPDATE `{$table}` SET ";
+        $pretty = $pretty ? "\r\n" : '';
 
-        $query.= \implode(', ', \array_map(function ($key, $value){
-            return "\r\n`{$key}` = :{$key}";
+        $query = "UPDATE {$table} SET ";
+
+        $query.= \implode(', ', \array_map(function ($key, $value) use ($pretty){
+            return "{$pretty} {$key} = :{$key}";
         }, \array_keys($dataset), $dataset));
 
         $where
@@ -209,12 +215,12 @@ class DBHelper implements DBHelperInterface
      */
     public static function buildReplaceQueryMVA(string $table, array $dataset, array $mva_attributes):array
     {
-        $query = "REPLACE INTO `{$table}` (";
+        $query = "REPLACE INTO {$table} (";
 
         $dataset_keys = \array_keys($dataset);
 
         $query .= \implode(', ', \array_map( static function ($i){
-            return "`{$i}`";
+            return "{$i}";
         }, $dataset_keys));
 
         $query .= " ) VALUES ( ";

@@ -5,7 +5,6 @@ namespace Arris\Database;
 use PDO;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
-use stdClass;
 
 /**
  * @method int|false            exec(string $statement = '')

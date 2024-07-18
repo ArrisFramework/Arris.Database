@@ -41,6 +41,8 @@ class DBMultiConnector implements DBMultiConnectorInterface
         $state_error_code = 0;
         $state_error_msg = '';
 
+        $db_driver = $db_host = $db_name = $db_user = $db_pass = $db_port = null;
+
         try {
             if (\is_null($config)) {
                 throw new RuntimeException("Arris\DBMultiConnector class can't find configuration data for suffix {$suffix}" . PHP_EOL, 2);
@@ -52,6 +54,7 @@ class DBMultiConnector implements DBMultiConnectorInterface
             $db_user = $config['username'] ?? 'root';
             $db_pass = $config['password'] ?? '';
             $db_port = $config['port'] ?? 3306;
+
 
             switch ($db_driver) {
                 case 'mysql': {
@@ -85,9 +88,9 @@ class DBMultiConnector implements DBMultiConnectorInterface
                 }
             } // switch
 
-            if (isset($config['charset']) && !\is_null($config['charset'])) {
+            if (isset($config['charset']) && !empty($config['charset'])) {
                 $sql = "SET NAMES {$config['charset']}";
-                if (isset($config['charset_collate']) && !\is_null($config['charset_collate'])) {
+                if (isset($config['charset_collate']) && !empty($config['charset_collate'])) {
                     $sql .= " COLLATE {$config['charset_collate']}";
                 }
                 $dbh->exec($sql);
