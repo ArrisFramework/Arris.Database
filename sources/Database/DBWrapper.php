@@ -2,16 +2,13 @@
 
 namespace Arris\Database;
 
+use ArrayAccess;
 use PDO;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
 /**
  * @method int|false            exec(string $statement = '')
- *
- * PDOStatement|false           _prepare($query = '', array $options = [])
- * PDOStatement|false           _query($statement, $mode = PDO::ATTR_DEFAULT_FETCH_MODE, ...$fetch_mode_args)
- *
  * @method bool                 beginTransaction()
  * @method bool                 commit()
  * @method bool                 rollback()
@@ -24,6 +21,9 @@ use Psr\Log\NullLogger;
  *
  * @method string               errorCode()
  * @method array                errorInfo()
+ *
+ * PDOStatement|false           _prepare($query = '', array $options = [])
+ * PDOStatement|false           _query($statement, $mode = PDO::ATTR_DEFAULT_FETCH_MODE, ...$fetch_mode_args)
  */
 class DBWrapper
 {
@@ -144,7 +144,16 @@ class DBWrapper
         $this->config->total_queries++;
 
         if ($this->last_state['time'] >= $this->config->slow_query_threshold && $this->config->slow_query_threshold > 0) {
-            $this->logger->debug($function);
+            $debug = \debug_backtrace();
+            $debug = $debug[1] ?? $debug[0];
+            $caller = \sprintf("%s%s%s", ($debug['class'] ?? ''), ($debug['type'] ?? ''), ($debug['function'] ?? ''));
+
+            $this->logger->info("PDO::{$function}() slow: ", [
+                $this->last_state['time'],
+                $caller,
+                ((PHP_SAPI === "cli") ? __FILE__ : ($_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'])),
+                $args
+            ]);
         }
 
         return $result;
@@ -221,24 +230,28 @@ class DBWrapper
 
     /**
      * @param int $precision
-     * @return array{total_queries:int,total_time:string}
+     * @return array{total_queries: int, total_time: string}
      */
     public function getStats(int $precision = 6)
     {
-        return [
-            'total_queries' =>  $this->config->total_queries,
-            'total_time'    =>  $this->config->formatTime($this->config->total_time, $precision)
-        ];
-
-        /*$object = (new class() extends stdClass {
+        /*$object = (new class() implements ArrayAccess {
             public int    $total_queries;
             public string  $total_time;
+
+            #[ReturnTypeWillChange] public function offsetExists($offset): bool { return isset($this->$offset); }
+            #[ReturnTypeWillChange] public function offsetGet($offset) { return $this->$offset ?? null; }
+            #[ReturnTypeWillChange] public function offsetSet($offset, $value):void { $this->$offset = $value; }
+            #[ReturnTypeWillChange] public function offsetUnset($offset):void { unset($this->$offset);}
         });
         $object->total_queries = $this->config->total_queries;
         $object->total_time = $this->config->formatTime($this->config->total_time, $precision);
 
-        return $object;
-        */
+        return $object;*/
+
+        return [
+            'total_queries' =>  $this->config->total_queries,
+            'total_time'    =>  $this->config->formatTime($this->config->total_time, $precision)
+        ];
     }
 
     private function updateLastState($args)
