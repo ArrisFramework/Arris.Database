@@ -8,8 +8,8 @@ use Psr\Log\NullLogger;
 
 class DBConfig implements DBConfigInterface
 {
-    public const DEFAULT_CHARSET = 'utf8';
-    public const DEFAULT_CHARSET_COLLATE = 'utf8_general_ci';
+    public const DEFAULT_CHARSET = 'utf8mb4';
+    public const DEFAULT_CHARSET_COLLATE = 'utf8mb4_unicode_ci';
 
     /**
      * @var AbstractLogger
@@ -89,7 +89,7 @@ class DBConfig implements DBConfigInterface
      */
     public function __construct(array $connection_config, array $options = [], LoggerInterface $logger = null)
     {
-        $this->logger = \is_null($logger) ? new NullLogger() : $logger;
+        $this->logger = $logger ?? new NullLogger();
 
         if (empty($connection_config)) {
             $this->logger->emergency("[DBWrapper Error] Connection config is empty");
@@ -135,7 +135,7 @@ class DBConfig implements DBConfigInterface
     }
 
     /**
-     * @param $time
+     * @param $time (float|string|int)
      * @param int $decimals
      * @param string $decimal_separator
      * @param string $thousands_separator
