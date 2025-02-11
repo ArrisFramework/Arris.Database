@@ -87,7 +87,7 @@ class DBConfig implements DBConfigInterface
      * @param array $options
      * @param LoggerInterface|null $logger
      */
-    public function __construct(array $connection_config, array $options = [], LoggerInterface $logger = null)
+    public function __construct(array $connection_config = [], array $options = [], LoggerInterface $logger = null)
     {
         $this->logger = $logger ?? new NullLogger();
 
@@ -132,6 +132,54 @@ class DBConfig implements DBConfigInterface
 
         // microseconds
         $this->slow_query_threshold /= 1000;
+    }
+
+    public function setDriver(string $driver = 'mysql'):self
+    {
+        $this->driver = $driver;
+        return $this;
+    }
+
+    public function setHost(string $host = '127.0.0.1'):self
+    {
+        $this->hostname = $host;
+        return $this;
+    }
+
+    public function setPort($port = 3306):self
+    {
+        $this->port = (int)$port;
+        return $this;
+    }
+
+    public function setDatabase(string $database = ''):self
+    {
+        $this->database = $database;
+        return $this;
+    }
+
+    public function setUser(string $user = 'root'):self
+    {
+        $this->username = $user;
+        return $this;
+    }
+
+    public function setPassword(string $password = ''):self
+    {
+        $this->password = $password;
+        return $this;
+    }
+
+    public function setCharset(string $charset = DBConfig::DEFAULT_CHARSET):self
+    {
+        $this->charset = $charset;
+        return $this;
+    }
+
+    public function setCollate(string $collate = DBConfig::DEFAULT_CHARSET_COLLATE):self
+    {
+        $this->charset_collate = $collate;
+        return $this;
     }
 
     /**

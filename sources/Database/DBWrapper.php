@@ -2,7 +2,6 @@
 
 namespace Arris\Database;
 
-use ArrayAccess;
 use PDO;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
@@ -25,7 +24,7 @@ use Psr\Log\NullLogger;
  * PDOStatement|false           _prepare($query = '', array $options = [])
  * PDOStatement|false           _query($statement, $mode = PDO::ATTR_DEFAULT_FETCH_MODE, ...$fetch_mode_args)
  */
-class DBWrapper
+class DBWrapper implements DBWrapperInterface
 {
     /**
      * @var LoggerInterface|null
@@ -49,9 +48,20 @@ class DBWrapper
      */
     private DBConfig $config;
 
-    public function __construct(array $connection_config, array $options = [], LoggerInterface $logger = null)
+    /**
+     * @param array|DBConfig $connection_config
+     * @param array $options
+     * @param LoggerInterface|null $logger
+     */
+    public function __construct($connection_config, array $options = [], LoggerInterface $logger = null)
     {
-        $this->config = new DBConfig($connection_config, $options, $logger);
+        if (is_array($connection_config)) {
+            $this->config = new DBConfig($connection_config, $options, $logger);
+        } elseif ($connection_config instanceof DBConfig) {
+            $this->config = $connection_config;
+        } else {
+            throw new \RuntimeException("Unsupported connection config given. Required array or DBConfig instance, given " . gettype($connection_config));
+        }
 
         $this->logger = \is_null($logger) ? new NullLogger() : $logger;
 
@@ -61,6 +71,8 @@ class DBWrapper
     }
 
     /**
+     * Init connection
+     *
      * @return void
      */
     private function initConnection()
@@ -72,7 +84,15 @@ class DBWrapper
                     $this->config->port,
                     $this->config->database);
 
-                $this->pdo = new PDO($dsl, $this->config->username, $this->config->password);
+                $this->pdo = new \PDO($dsl, $this->config->username, $this->config->password);
+
+                if ($this->config->charset) {
+                    $sql_collate = "SET NAMES {$this->config->charset}";
+                    if ($this->config->charset_collate) {
+                        $sql_collate .= " COLLATE {$this->config->charset_collate}";
+                    }
+                    $this->pdo->exec($sql_collate);
+                }
 
                 break;
             }
@@ -86,6 +106,11 @@ class DBWrapper
 
                 $this->pdo = new \PDO($dsl);
 
+                if ($this->config->charset) {
+                    $sql_collate = "SET NAMES {$this->config->charset}";
+                    $this->pdo->exec($sql_collate);
+                }
+
                 break;
             }
             case 'sqlite': {
@@ -96,16 +121,7 @@ class DBWrapper
             }
             default: {
                 throw new \RuntimeException('Unknown database driver : ' . $this->config->driver);
-                break;
             }
-        }
-
-        if ($this->config->charset) {
-            $sql_collate = "SET NAMES {$this->config->charset}";
-            if ($this->config->charset_collate) {
-                $sql_collate .= " COLLATE {$this->config->charset_collate}";
-            }
-            $this->pdo->exec($sql_collate);
         }
 
         $this->pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
@@ -211,7 +227,7 @@ class DBWrapper
     }
 
     /**
-     * @return string
+     * @inheritDoc
      */
     public function getLastQueryTime(): string
     {
@@ -219,7 +235,7 @@ class DBWrapper
     }
 
     /**
-     * @return array
+     * @inheritDoc
      */
     public function getLastState():array
     {
@@ -229,10 +245,9 @@ class DBWrapper
     }
 
     /**
-     * @param int $precision
-     * @return array{total_queries: int, total_time: string}
+     * @inheritDoc
      */
-    public function getStats(int $precision = 6)
+    public function getStats(int $precision = 6):array
     {
         /*$object = (new class() implements ArrayAccess {
             public int    $total_queries;

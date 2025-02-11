@@ -17,7 +17,7 @@
     "require": {
         "php": ">=7.4 | 8.*",
         "ext-pdo": "*",
-        "psr/log": "^1 | ^2 | ^3"
+        "psr/log": "*"
     },
     "require-dev": {
         "predis/predis": "^2.0",
@@ -31,7 +31,7 @@
     "suggest": {
         "karelwintersky/arris.entity": "Arris µFramework: Entity Types",
         "karelwintersky/arris.helpers": "Arris µFramework: helpers",
-        "ajur-media/fluentpdo": "^1.0.3"
+        "ajur-media/fluentpdo": "^1"
     },
     "autoload": {
         "psr-4": {

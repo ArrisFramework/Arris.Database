@@ -55,6 +55,7 @@ class PDOStatement
             $debug = $debug[1] ?? $debug[0];
             $caller = \sprintf("%s%s%s", ($debug['class'] ?? ''), ($debug['type'] ?? ''), ($debug['function'] ?? ''));
 
+            //@todo: looks like traceroute required, not __FILE__!
             $this->config->logger->info("PDO::execute() slow: ", [
                 $time_consumed,
                 $caller,
