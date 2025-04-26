@@ -91,18 +91,18 @@ class DBConfig implements DBConfigInterface
     {
         $this->logger = $logger ?? new NullLogger();
 
-        if (empty($connection_config)) {
+        /*if (empty($connection_config)) {
             $this->logger->emergency("[DBWrapper Error] Connection config is empty");
             throw new \RuntimeException("[DBWrapper Error] Connection config is empty");
-        }
+        }*/
 
         $this->db_config = $connection_config;
         $this->driver   = $connection_config['driver'] ?? 'mysql';
         $this->hostname = $connection_config['hostname'] ?? '127.0.0.1';
         $this->port     = $connection_config['port'] ?? 3306;
         $this->username = $connection_config['username'] ?? 'root';
-        $this->password = $connection_config['password'];
-        $this->database = $connection_config['database'];
+        $this->password = $connection_config['password'] ?? '';
+        $this->database = $connection_config['database'] ?? '';
         $this->is_lazy  = true;
 
         if (!\array_key_exists('charset', $this->db_config)) {
