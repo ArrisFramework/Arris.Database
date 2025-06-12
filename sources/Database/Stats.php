@@ -7,8 +7,8 @@ class Stats implements StatsInterface
     private ?Config $config;
 
     private int $queryCount = 0;
-
     private int $preparedQueryCount = 0;
+
     private float $totalQueryTime = 0.0;
     private float $totalQueryCount = 0;
 
@@ -124,5 +124,17 @@ class Stats implements StatsInterface
         $this->totalQueryTime = 0.0;
         $this->queries = [];
         $this->slowQueries = [];
+    }
+
+    /**
+     * @param $time (float|string|int)
+     * @param int $decimals
+     * @param string $decimal_separator
+     * @param string $thousands_separator
+     * @return string
+     */
+    public static function formatTime($time = 0, int $decimals = 6, string $decimal_separator = '.', string $thousands_separator = ''): string
+    {
+        return \number_format($time, $decimals, $decimal_separator, $thousands_separator);
     }
 }

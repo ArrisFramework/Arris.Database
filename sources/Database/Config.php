@@ -196,16 +196,6 @@ class Config implements ConfigInterface
         return $this;
     }
 
-    /**
-     * @param $time (float|string|int)
-     * @param int $decimals
-     * @param string $decimal_separator
-     * @param string $thousands_separator
-     * @return string
-     */
-    public function __formatTime($time = 0, int $decimals = 6, string $decimal_separator = '.', string $thousands_separator = ''): string
-    {
-        return \number_format($time, $decimals, $decimal_separator, $thousands_separator);
-    }
+
 
 }

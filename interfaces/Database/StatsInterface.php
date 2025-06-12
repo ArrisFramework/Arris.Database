@@ -21,4 +21,6 @@ interface StatsInterface
     public function getLastQuery(): ?array;
 
     public function reset(): void;
+
+    public static function formatTime($time = 0, int $decimals = 6, string $decimal_separator = '.', string $thousands_separator = ''): string;
 }
