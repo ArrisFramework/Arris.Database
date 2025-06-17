@@ -13,6 +13,6 @@ interface QueryMakerInterface
     public static function buildInsertQuery(string $table, array &$dataset): stdClass;
     public static function buildUpdateQuery(string $table, array &$dataset, array &$whereConditions): stdClass;
 
-    public static function buildReplaceQueryMVA(string $table, array $dataset, array $mva_attributes):array;
+    public static function buildReplaceQueryMVA(string $table, array $dataset, array $mva_attributes):stdClass;
 
 }
