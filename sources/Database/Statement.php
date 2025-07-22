@@ -34,13 +34,9 @@ class Statement extends PDOStatement implements StatementInterface
             return $result;
 
         } catch (PDOException $e) {
-
             $this->stats->recordQuery('prepared', $this->query, $params, $startTime, true);
             throw $e;
-
         }
-
-
     }
 
     public function exec(?array $params = null): bool

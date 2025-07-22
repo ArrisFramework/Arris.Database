@@ -92,7 +92,7 @@ class Connector extends PDO implements ConnectorInterface
      */
     private function ensureConnection()
     {
-        if (empty($this->pdo)) {
+        if (empty($this->pdo_connector)) {
             $this->initConnection();
         }
     }
@@ -230,6 +230,11 @@ class Connector extends PDO implements ConnectorInterface
     }
 
     public function stats():Stats
+    {
+        return $this->stats;
+    }
+
+    public function metrics():Stats
     {
         return $this->stats;
     }

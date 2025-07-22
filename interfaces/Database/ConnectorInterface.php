@@ -28,4 +28,5 @@ interface ConnectorInterface
     public function quote(string $string, int $type = PDO::PARAM_STR): string|false;
 
     public function stats():Stats;
+    public function metrics():Stats;
 }
