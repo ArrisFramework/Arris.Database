@@ -32,6 +32,8 @@ class Config implements ConfigInterface
     public ?float $slowQueryThreshold = 1.0; // ms
     public bool $collectBacktrace = true;
 
+    public Tables $tables;
+
     public function __construct(array $connection_config = [], ?LoggerInterface $logger = null)
     {
         $this->logger = $logger ?? new NullLogger();
@@ -54,6 +56,32 @@ class Config implements ConfigInterface
         } else {
             $this->charset = self::DEFAULT_CHARSET;
         }
+
+        $this->tables = new Tables();
+    }
+
+    public function initTables(string $prefix = '',
+                               array $tables = [],
+                               array $havePrefix = [],
+                               array $haveAlias = []): self
+    {
+        $this->tables = new Tables($prefix, $tables, $havePrefix, $haveAlias);
+        return $this;
+    }
+
+    public function addTable(string $key,
+                             ?string $tableName = null,
+                             ?string $replacement = null,
+                             bool $withPrefix = false,
+                             ?string $alias = null):self
+    {
+        $this->tables->addTable($key, $tableName, $replacement, $withPrefix, $alias);
+        return $this;
+    }
+
+    public function getTable($key = null):string|array
+    {
+        return $this->tables->getTable($key);
     }
 
     public function setDriver(?string $driver):self

@@ -12,6 +12,7 @@ class Connector extends PDO implements ConnectorInterface
     private ?PDO $pdo_connector = null;
     private ?Config $config;
     private ?Stats $stats;
+    public  Tables $tables;
 
     private string $dsn;
     private ?string $username;
@@ -29,6 +30,7 @@ class Connector extends PDO implements ConnectorInterface
         $this->password = $config->getPassword();
         $this->options = $config->getOptions() ?? [];
         $this->stats = new Stats($config);
+        $this->tables = $config->tables;
     }
 
     /**
@@ -90,7 +92,7 @@ class Connector extends PDO implements ConnectorInterface
      * Check real connection
      * @return void
      */
-    private function ensureConnection()
+    private function ensureConnection(): void
     {
         if (empty($this->pdo_connector)) {
             $this->initConnection();

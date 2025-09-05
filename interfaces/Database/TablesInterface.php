@@ -19,4 +19,6 @@ interface TablesInterface
         ?string $alias = null
     ): Tables;
 
+    public function getTable(?string $key = null):array|string;
+
 }

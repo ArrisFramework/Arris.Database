@@ -76,14 +76,33 @@ class Tables implements \ArrayAccess, TablesInterface
             $this->haveAlias[$key] = $alias;
         }
 
-        return $this; // Для цепочечных вызовов
+        return $this;
     }
 
-    //
+    /**
+     * Возвращает список таблиц (в репозитории) с учетом правил замен
+     * Или одну таблицу по ключу.
+     *
+     * @param string|null $key
+     * @return array|string
+     */
+    public function getTable(?string $key = null):array|string
+    {
+        if (is_null($key)) {
+            $tables = [];
+            foreach ($this->tables as $key => $v) {
+                $tables[] = $this->offsetGet($key);
+            }
+
+            return $tables;
+        }
+
+        return $this->offsetGet($key);
+    }
 
     /**
      * Проверяет, существует ли ключ
-     * (таблица в репозитории)     *
+     * (таблица в репозитории)
      *
      * @param mixed $offset
      * @return bool
@@ -111,9 +130,8 @@ class Tables implements \ArrayAccess, TablesInterface
         // Если аргумент есть в таблице замен - подставляем значение из have_prefix
         if (isset($this->havePrefix[$offset])) {
             $result = $this->havePrefix[$offset];
-        }
-        // Иначе если есть в таблице have_prefix - ставим префикс
-        elseif (in_array($offset, $this->havePrefix, true)) {
+        } elseif (in_array($offset, $this->havePrefix, true)) {
+            // Иначе если есть в таблице have_prefix - ставим префикс
             $result = $this->prefix . $tableName;
         }
         // Иначе ставим значение ключа (уже в $tableName)
