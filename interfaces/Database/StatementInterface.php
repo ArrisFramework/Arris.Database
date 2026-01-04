@@ -22,7 +22,7 @@ interface StatementInterface
 
     public function fetch(int $mode = PDO::FETCH_DEFAULT, int $cursorOrientation = PDO::FETCH_ORI_NEXT, int $cursorOffset = 0): mixed;
 
-    public function fetchAll($mode = PDO::FETCH_BOTH, $fetch_argument = null, ...$args);
+    public function fetchAll($mode = PDO::FETCH_BOTH, ...$args);
 
     public function fetchColumn(int $column = 0): mixed;
     public function rowCount(): int;

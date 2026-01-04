@@ -68,9 +68,8 @@ class Statement extends PDOStatement implements StatementInterface
     #[ReturnTypeWillChange]
     public function fetchAll(
         $mode = PDO::FETCH_BOTH,
-        $fetch_argument = null,
         ...$args
-    )
+    ): array
     {
         return $this->pdo_statement->fetchAll($mode, ...$args);
     }
@@ -95,6 +94,7 @@ class Statement extends PDOStatement implements StatementInterface
         return $this->pdo_statement->errorInfo();
     }
 
+    #[ReturnTypeWillChange]
     public function setFetchMode($mode, $className = null, ...$args):bool
     {
         return $this->pdo_statement->setFetchMode($mode, ...$args);
