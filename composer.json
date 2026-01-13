@@ -19,6 +19,9 @@
         "ext-pdo": "*",
         "psr/log": "*"
     },
+    "require-dev": {
+        "phpunit/phpunit": "^10.0|^11.0"
+    },
     "suggest": {
         "karelwintersky/arris.entity": "Arris µFramework: Entity Types",
         "karelwintersky/arris.helpers": "Arris µFramework: helpers"

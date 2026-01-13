@@ -2,6 +2,7 @@
 
 namespace Arris\Database;
 
+use Arris\Database\Helper\QueryBuilder;
 use PDO;
 use PDOException;
 use PDOStatement;
@@ -244,5 +245,10 @@ class Connector extends PDO implements ConnectorInterface
     public function getPDOConnector(): ?PDO
     {
         return $this->pdo_connector;
+    }
+
+    public function builder(): QueryBuilder
+    {
+        return new QueryBuilder($this);
     }
 }
