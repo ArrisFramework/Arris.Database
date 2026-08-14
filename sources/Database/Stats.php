@@ -121,9 +121,12 @@ class Stats implements StatsInterface
     {
         $this->queryCount = 0;
         $this->preparedQueryCount = 0;
+        $this->totalQueryCount = 0;
         $this->totalQueryTime = 0.0;
         $this->queries = [];
         $this->slowQueries = [];
+        $this->slowQueryThreshold = $this->config->slowQueryThreshold;
+        $this->initTimestamp = microtime(true);
     }
 
     /**

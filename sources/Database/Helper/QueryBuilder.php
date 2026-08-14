@@ -440,17 +440,28 @@ class QueryBuilder
     }
 
     /**
-     * Получить все bindings
+     * Получить все bindings (в порядке появления placeholder-ов в SQL)
      */
     public function getBindings(): array
     {
-        return $this->bindings;
+        return $this->compile()['bindings'];
     }
 
     /**
      * Компилирует SQL запрос
      */
     public function toSQL(): string
+    {
+        return $this->compile()['sql'];
+    }
+
+    /**
+     * Компилирует запрос одним проходом: SQL и bindings в правильном порядке.
+     * Чистая функция, не мутирует состояние билдера.
+     *
+     * @return array{sql: string, bindings: array}
+     */
+    private function compile(): array
     {
         return match($this->type) {
             'select' => $this->compileSelect(),
@@ -465,7 +476,7 @@ class QueryBuilder
     /**
      * Компилирует SELECT
      */
-    private function compileSelect(): string
+    private function compileSelect(): array
     {
         $parts = ['SELECT'];
 
@@ -497,6 +508,8 @@ class QueryBuilder
             }
         }
 
+        $bindings = $this->bindings;
+
         if (!empty($this->wheres)) {
             $parts[] = 'WHERE ' . $this->compileWheres();
         }
@@ -507,6 +520,7 @@ class QueryBuilder
 
         if ($this->having) {
             $parts[] = 'HAVING ' . $this->having;
+            $bindings = [...$bindings, ...$this->havingBindings];
         }
 
         if (!empty($this->orderBy)) {
@@ -528,18 +542,22 @@ class QueryBuilder
         if (!empty($this->unions)) {
             foreach ($this->unions as $union) {
                 $keyword = $this->isUnionAll ? 'UNION ALL' : 'UNION';
-                $parts[] = "$keyword {$union->toSql()}";
-                $this->bindings = [...$this->bindings, ...$union->getBindings()];
+                $unionCompiled = $union->compile();
+                $parts[] = "$keyword {$unionCompiled['sql']}";
+                $bindings = [...$bindings, ...$unionCompiled['bindings']];
             }
         }
 
-        return implode(' ', $parts);
+        return [
+            'sql' => implode(' ', $parts),
+            'bindings' => $bindings
+        ];
     }
 
     /**
      * Компилирует INSERT
      */
-    private function compileInsert(): string
+    private function compileInsert(): array
     {
         if (empty($this->values)) {
             throw new RuntimeException('No data provided for INSERT');
@@ -547,20 +565,22 @@ class QueryBuilder
 
         $columns = array_keys($this->values);
         $placeholders = array_fill(0, count($columns), '?');
-        $this->bindings = array_values($this->values);
 
-        return sprintf(
-            'INSERT INTO %s (%s) VALUES (%s)',
-            $this->table,
-            implode(', ', $columns),
-            implode(', ', $placeholders)
-        );
+        return [
+            'sql' => sprintf(
+                'INSERT INTO %s (%s) VALUES (%s)',
+                $this->table,
+                implode(', ', $columns),
+                implode(', ', $placeholders)
+            ),
+            'bindings' => array_values($this->values)
+        ];
     }
 
     /**
      * Компилирует UPDATE
      */
-    private function compileUpdate(): string
+    private function compileUpdate(): array
     {
         if (empty($this->sets)) {
             throw new RuntimeException('No data provided for UPDATE');
@@ -574,8 +594,6 @@ class QueryBuilder
             $setBindings[] = $value;
         }
 
-        $this->bindings = [...$setBindings, ...$this->bindings];
-
         $parts = [
             'UPDATE',
             $this->table,
@@ -587,13 +605,16 @@ class QueryBuilder
             $parts[] = 'WHERE ' . $this->compileWheres();
         }
 
-        return implode(' ', $parts);
+        return [
+            'sql' => implode(' ', $parts),
+            'bindings' => [...$setBindings, ...$this->bindings]
+        ];
     }
 
     /**
      * Компилирует DELETE
      */
-    private function compileDelete(): string
+    private function compileDelete(): array
     {
         $parts = ['DELETE FROM', $this->table];
 
@@ -601,13 +622,16 @@ class QueryBuilder
             $parts[] = 'WHERE ' . $this->compileWheres();
         }
 
-        return implode(' ', $parts);
+        return [
+            'sql' => implode(' ', $parts),
+            'bindings' => $this->bindings
+        ];
     }
 
     /**
      * Компилирует REPLACE
      */
-    private function compileReplace(): string
+    private function compileReplace(): array
     {
         if (empty($this->values)) {
             throw new RuntimeException('No data provided for REPLACE');
@@ -615,14 +639,16 @@ class QueryBuilder
 
         $columns = array_keys($this->values);
         $placeholders = array_fill(0, count($columns), '?');
-        $this->bindings = array_values($this->values);
 
-        return sprintf(
-            'REPLACE INTO %s (%s) VALUES (%s)',
-            $this->table,
-            implode(', ', $columns),
-            implode(', ', $placeholders)
-        );
+        return [
+            'sql' => sprintf(
+                'REPLACE INTO %s (%s) VALUES (%s)',
+                $this->table,
+                implode(', ', $columns),
+                implode(', ', $placeholders)
+            ),
+            'bindings' => array_values($this->values)
+        ];
     }
 
     /**
@@ -679,17 +705,14 @@ class QueryBuilder
      */
     private function prepareStatement(): Statement
     {
-        $sql = $this->toSQL();
-        $stmt = $this->connector->prepare($sql);
+        $compiled = $this->compile();
+        $stmt = $this->connector->prepare($compiled['sql']);
 
         if ($stmt === false) {
             throw new RuntimeException('Failed to prepare statement');
         }
 
-        // Добавляем HAVING bindings после основных
-        $allBindings = [...$this->bindings, ...$this->havingBindings];
-
-        foreach ($allBindings as $index => $value) {
+        foreach ($compiled['bindings'] as $index => $value) {
             $type = match(true) {
                 is_int($value) => PDO::PARAM_INT,
                 is_bool($value) => PDO::PARAM_BOOL,
@@ -888,9 +911,11 @@ class QueryBuilder
      */
     public function debug(): array
     {
+        $compiled = $this->compile();
+
         return [
-            'sql' => $this->toSQL(),
-            'bindings' => [...$this->bindings, ...$this->havingBindings],
+            'sql' => $compiled['sql'],
+            'bindings' => $compiled['bindings'],
             'type' => $this->type
         ];
     }

@@ -448,6 +448,50 @@ class QueryBuilderTest extends TestCase
         $this->assertStringContainsString('UNION ALL', $sql);
     }
 
+    public function testUnionToSQLIsIdempotent(): void
+    {
+        $qb1 = new QueryBuilder($this->connector);
+        $qb2 = new QueryBuilder($this->connector);
+
+        $q = $qb1->select('id')
+            ->from('a')
+            ->where('x', 1)
+            ->union($qb2->select('id')->from('b')->where('y', 2));
+
+        $q->toSQL();
+        $q->toSQL();
+
+        $this->assertEquals([1, 2], $q->getBindings());
+        $this->assertEquals([1, 2], $q->debug()['bindings']);
+    }
+
+    public function testUpdateToSQLIsIdempotent(): void
+    {
+        $this->qb->update('t')
+            ->set('status', 'off')
+            ->where('id', 7);
+
+        $this->qb->toSQL();
+        $this->qb->toSQL();
+
+        $this->assertEquals(['off', 7], $this->qb->getBindings());
+    }
+
+    public function testHavingAndUnionBindingOrder(): void
+    {
+        $qb1 = new QueryBuilder($this->connector);
+        $qb2 = new QueryBuilder($this->connector);
+
+        $q = $qb1->select('cat')
+            ->from('t')
+            ->where('a', 1)
+            ->groupBy('cat')
+            ->having('n', '>', 3)
+            ->union($qb2->select('cat')->from('t2')->where('z', 9));
+
+        $this->assertEquals([1, 3, 9], $q->debug()['bindings']);
+    }
+
     // ==================== INSERT Tests ====================
 
     public function testInsert(): void

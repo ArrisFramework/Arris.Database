@@ -20,7 +20,7 @@ class QueryMaker implements QueryMakerInterface
     public static function makeUpdateQuery(string $table, &$dataset, $where_condition, bool $pretty = true):string
     {
         if (empty($dataset)) {
-            return false;
+            throw new InvalidArgumentException(__METHOD__ . " => Dataset cannot be empty");
         }
 
         $set = [];
@@ -106,7 +106,7 @@ class QueryMaker implements QueryMakerInterface
     public static function makeReplaceQuery(string $table, array &$dataset, string $where = '', bool $pretty = true): string
     {
         if (empty($dataset)) {
-            return false;
+            throw new InvalidArgumentException(__METHOD__ . " => Dataset cannot be empty");
         }
         $fields = [];
 
@@ -140,7 +140,7 @@ class QueryMaker implements QueryMakerInterface
     public static function buildInsertQuery(string $table, array &$dataset): stdClass
     {
         if (empty($dataset)) {
-            throw new InvalidArgumentException("Dataset cannot be empty");
+            throw new InvalidArgumentException(__METHOD__ . " => Dataset cannot be empty");
         }
 
         $result = new stdClass();
@@ -169,7 +169,7 @@ class QueryMaker implements QueryMakerInterface
     public static function buildUpdateQuery(string $table, array &$dataset, array &$whereConditions): stdClass
     {
         if (empty($dataset)) {
-            throw new InvalidArgumentException("Dataset cannot be empty");
+            throw new InvalidArgumentException(__METHOD__ . " => Dataset cannot be empty");
         }
 
         $result = new stdClass();
@@ -217,6 +217,10 @@ class QueryMaker implements QueryMakerInterface
      */
     public static function buildReplaceQueryMVA(string $table, array $dataset, array $mva_attributes):stdClass
     {
+        if (empty($dataset)) {
+            throw new InvalidArgumentException(__METHOD__ . " => Dataset cannot be empty");
+        }
+
         $query = "REPLACE INTO {$table} (";
 
         $dataset_keys = \array_keys($dataset);
