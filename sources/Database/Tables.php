@@ -26,7 +26,6 @@ class Tables implements \ArrayAccess, TablesInterface
         array $haveAlias = []
     ) {
         $this->prefix = $prefix;
-        $this->tables = $tables;
         $this->havePrefix = $havePrefix;
         $this->haveAlias = $haveAlias;
 
@@ -88,7 +87,7 @@ class Tables implements \ArrayAccess, TablesInterface
      */
     public function getTable(?string $key = null):array|string
     {
-        if (is_null($key)) {
+        if (is_null($key) || $key === '*') {
             $tables = [];
             foreach ($this->tables as $key => $v) {
                 $tables[] = $this->offsetGet($key);

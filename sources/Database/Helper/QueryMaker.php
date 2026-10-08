@@ -63,6 +63,17 @@ class QueryMaker implements QueryMakerInterface
         return $query;
     }
 
+    /**
+     * Возвращает SQL INSERT запрос, модифицирует переданный датасет.
+     * Так,
+     *
+     * @param string $table
+     * @param $dataset
+     * @param bool $pretty
+     *
+     * @return string
+     * @throws \JsonException
+     */
     public static function makeInsertQuery(string $table, &$dataset, bool $pretty = true):string
     {
         if (empty($dataset)) {
@@ -89,6 +100,8 @@ class QueryMaker implements QueryMakerInterface
             }
 
             $insert_fields[] = "{$pretty} {$index} = :{$index}";
+
+            $dataset[$index] = self::cast($value);
         }
 
         $query .= \implode(', ', $insert_fields) . ' ;';
@@ -137,6 +150,9 @@ class QueryMaker implements QueryMakerInterface
         return $query;
     }
 
+    /**
+     * @throws \JsonException
+     */
     public static function buildInsertQuery(string $table, array &$dataset): stdClass
     {
         if (empty($dataset)) {
@@ -152,6 +168,9 @@ class QueryMaker implements QueryMakerInterface
             $param = ':' . $column;
             $columns[] = $column;
             $placeholders[] = $param;
+
+            $value = self::cast($value);
+
             $params[$param] = $value;
         }
 
@@ -166,6 +185,9 @@ class QueryMaker implements QueryMakerInterface
         return $result;
     }
 
+    /**
+     * @throws \JsonException
+     */
     public static function buildUpdateQuery(string $table, array &$dataset, array &$whereConditions): stdClass
     {
         if (empty($dataset)) {
@@ -180,6 +202,7 @@ class QueryMaker implements QueryMakerInterface
         foreach ($dataset as $column => $value) {
             $param = ':set_' . $column;
             $setParts[] = "$column = $param";
+            $value = self::cast($value);
             $params[$param] = $value;
         }
 
@@ -188,6 +211,7 @@ class QueryMaker implements QueryMakerInterface
         foreach ($whereConditions as $column => $value) {
             $param = ':where_' . $column;
             $whereParts[] = "$column = $param";
+            $value = self::cast($value);
             $params[$param] = $value;
         }
 
@@ -248,6 +272,27 @@ class QueryMaker implements QueryMakerInterface
         return $result;
     }
 
+    /**
+     * Преобразует переменную к типу, пригодному для вставки в SQL
+     * 
+     * @param mixed $value
+     *
+     * @return mixed
+     * @throws \JsonException
+     */
+    public static function cast(mixed $value):mixed
+    {
+        return match(gettype($value)) {
+            "NULL"      =>  'NULL',                          // NULL в SQL
+            'boolean'   =>  (int)$value,                     // true→1, false→0
+            'double'    =>  (string)$value,                  // float → string для безопасности
+            'array'     =>  json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+            'object'    =>  json_encode((array)$value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+            'resource'  =>  (string)$value,                  // или null
+            'resource (closed)' => 'NULL',                  // закрытый ресурс
+            default     => $value
+        };
+    }
 
 
 }
