@@ -1,7 +1,8 @@
 <?php
 
-namespace Arris\Database\Helper;
+namespace Tests\Arris\Database\Helper;
 
+use Arris\Database\Helper\QueryBuilder;
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\MockObject\MockObject;
 use Arris\Database\Connector;

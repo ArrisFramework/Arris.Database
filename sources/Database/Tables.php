@@ -7,50 +7,50 @@ use InvalidArgumentException;
 class Tables implements \ArrayAccess, TablesInterface
 {
     private string $prefix;
-    private array $tables;
-    private array $havePrefix;
-    private array $haveAlias;
 
     /**
-     * Инициализируется репозиторий таблиц
+     * Репозиторий таблиц.
      *
-     * @param string $prefix
-     * @param array $tables
-     * @param array $havePrefix
-     * @param array $haveAlias
+     * Формат:
+     *   key => [
+     *       'tableName'   => string,       // имя таблицы в БД
+     *       'replacement' => string|null,  // явная подмена (перебивает prefix)
+     *       'prefix'      => bool,         // нужно ли добавлять префикс
+     *       'alias'       => string|null,  // алиас
+     *   ]
+     *
+     * @var array<string, array{tableName: string, replacement: ?string, prefix: bool, alias: ?string}>
      */
-    public function __construct(
-        string $prefix = '',
-        array $tables = [],
-        array $havePrefix = [],
-        array $haveAlias = []
-    ) {
-        $this->prefix = $prefix;
-        $this->havePrefix = $havePrefix;
-        $this->haveAlias = $haveAlias;
+    private array $tables = [];
 
-        // Если в конструктор переданы строки (не ассоциативный массив),
-        // то каждая строка становится и ключом, и значением
+    /**
+     * @param string $prefix
+     * @param array  $tables Скалярный список ['users', 'posts']
+     *                       или ассоциативный ['users' => 'users_table']
+     */
+    public function __construct(string $prefix = '', array $tables = [])
+    {
+        $this->prefix = $prefix;
+
         foreach ($tables as $key => $value) {
             if (is_int($key)) {
-                // Это скалярный массив типа ['a', 'b']
+                // ['users', 'posts'] — ключ = значение = имя таблицы
                 $this->addTable($value, $value);
             } else {
-                // Это ассоциативный массив типа ['users' => 'users_table']
+                // ['users' => 'users_table']
                 $this->addTable($key, $value);
             }
         }
     }
 
     /**
-     * Добавляет таблицу в репозиторий
+     * Добавляет таблицу в репозиторий.
      *
-     * @param string $key Ключ для обращения к таблице
-     * @param string|null $tableName Имя таблицы в БД
-     * @param string|null $replacement Если задан, будет использовано вместо tableName
-     * @param bool $withPrefix Добавлять ли префикс (игнорируется если задан replacement)
-     * @param string|null $alias Алиас для таблицы
-     * @return Tables
+     * @param string      $key         Ключ для обращения
+     * @param string|null $tableName   Имя таблицы в БД (по умолчанию = $key)
+     * @param string|null $replacement Явная подмена (игнорирует prefix)
+     * @param bool        $withPrefix  Добавлять ли префикс
+     * @param string|null $alias       Алиас
      */
     public function addTable(
         string $key,
@@ -59,63 +59,47 @@ class Tables implements \ArrayAccess, TablesInterface
         bool $withPrefix = false,
         ?string $alias = null
     ): self {
-        if (empty($tableName)) {
+        if ($tableName === null || $tableName === '') {
             $tableName = $key;
         }
 
-        $this->tables[$key] = $tableName;
-
-        if ($replacement !== null) {
-            $this->havePrefix[$key] = $replacement;
-        } elseif ($withPrefix) {
-            $this->havePrefix[] = $key;
-        }
-
-        if ($alias !== null) {
-            $this->haveAlias[$key] = $alias;
-        }
+        $this->tables[$key] = [
+            'tableName'   => $tableName,
+            'replacement' => $replacement,
+            'prefix'      => $withPrefix,
+            'alias'       => $alias,
+        ];
 
         return $this;
     }
 
     /**
-     * Возвращает список таблиц (в репозитории) с учетом правил замен
-     * Или одну таблицу по ключу.
+     * Возвращает список таблиц (с учётом правил) либо одну по ключу.
      *
      * @param string|null $key
+     *
      * @return array|string
      */
-    public function getTable(?string $key = null):array|string
+    public function getTable(?string $key = null): array|string
     {
-        if (is_null($key) || $key === '*') {
-            $tables = [];
-            foreach ($this->tables as $key => $v) {
-                $tables[] = $this->offsetGet($key);
+        if ($key === null || $key === '*') {
+            $result = [];
+            foreach (array_keys($this->tables) as $k) {
+                $result[] = $this->offsetGet($k);
             }
-
-            return $tables;
+            return $result;
         }
 
         return $this->offsetGet($key);
     }
 
-    /**
-     * Проверяет, существует ли ключ
-     * (таблица в репозитории)
-     *
-     * @param mixed $offset
-     * @return bool
-     */
     public function offsetExists(mixed $offset): bool
     {
         return isset($this->tables[$offset]);
     }
 
     /**
-     * Возвращает значение по ключу с учетом логики префиксов и алиасов
-     *
-     * @param mixed $offset
-     * @return string
+     * Строит итоговое имя таблицы на основе структуры.
      */
     public function offsetGet(mixed $offset): string
     {
@@ -123,63 +107,64 @@ class Tables implements \ArrayAccess, TablesInterface
             throw new InvalidArgumentException("Table '$offset' not found.");
         }
 
-        $tableName = $this->tables[$offset];
-        $result = $tableName;
+        $row = $this->tables[$offset];
 
-        // Если аргумент есть в таблице замен - подставляем значение из have_prefix
-        if (isset($this->havePrefix[$offset])) {
-            $result = $this->havePrefix[$offset];
-        } elseif (in_array($offset, $this->havePrefix, true)) {
-            // Иначе если есть в таблице have_prefix - ставим префикс
-            $result = $this->prefix . $tableName;
+        // replacement имеет приоритет над prefix
+        if ($row['replacement'] !== null) {
+            $result = $row['replacement'];
+        } elseif ($row['prefix']) {
+            $result = $this->prefix . $row['tableName'];
+        } else {
+            $result = $row['tableName'];
         }
-        // Иначе ставим значение ключа (уже в $tableName)
 
-        // Если аргумент есть в таблице have_alias - добавляем AS alias
-        if (isset($this->haveAlias[$offset])) {
-            $alias = $this->haveAlias[$offset];
-            $result .= ' AS ' . $alias;
+        // алиас
+        if ($row['alias'] !== null) {
+            $result .= ' AS ' . $row['alias'];
         }
 
         return $result;
     }
 
-    /**
-     * Устанавливает значение
-     *
-     * @param mixed $offset
-     * @param mixed $value
-     * @return void
-     */
-    public function offsetSet(mixed $offset, mixed $value): void
+    public function offsetSet($offset, mixed $value): void
     {
-        if (is_null($offset)) {
-            $this->tables[] = $value;
+        if ($offset === null) {
+            // $tables[] = 'name' — трактуем как новую таблицу
+            $this->addTable((string)$value, (string)$value);
+            return;
+        }
+
+        // Просто перезаписываем имя таблицы, сохраняя прочие атрибуты,
+        // если запись уже существует; иначе создаём новую.
+        if (isset($this->tables[$offset])) {
+            $this->tables[$offset]['tableName'] = (string)$value;
         } else {
-            $this->tables[$offset] = $value;
+            $this->addTable((string)$offset, (string)$value);
         }
     }
 
-    /**
-     * Удаляет значение по ключу
-     *
-     * @param mixed $offset
-     * @return void
-     */
     public function offsetUnset(mixed $offset): void
     {
         unset($this->tables[$offset]);
-        unset($this->havePrefix[$offset]);
-        unset($this->haveAlias[$offset]);
-
-        // Удаляем из массива скалярных значений, если есть
-        $key = array_search($offset, $this->havePrefix, true);
-        if ($key !== false) {
-            unset($this->havePrefix[$key]);
-        }
     }
 
+    public function __get(string $name): ?string
+    {
+        return $this->offsetExists($name) ? $this->offsetGet($name) : '';
+    }
 
+    public function __set(string $name, mixed $value): void
+    {
+        $this->offsetSet($name, $value);
+    }
+
+    public function __isset(string $name): bool
+    {
+        return $this->offsetExists($name);
+    }
+
+    public function __unset(string $name): void
+    {
+        $this->offsetUnset($name);
+    }
 }
-
-# -eof- #

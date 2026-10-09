@@ -10,11 +10,11 @@ echo $t2['users'];  // выводит: 'users_table'
 echo $t2['orders']; // выводит: 'orders_table'
 
 // Добавление таблицы без указания имени - имя равно ключу
-$t3 = new TableRepository(prefix: 'prefix_');
+$t3 = new TableRepository(prefix: 'x_');
 $t3->addTable('users'); // tableName = 'users' (автоматически)
 $t3->addTable('orders', withPrefix: true); // tableName = 'orders', с префиксом
 echo $t3['users'];   // выводит: 'users'
-echo $t3['orders'];  // выводит: 'prefix_orders'
+echo $t3['orders'];  // выводит: 'x_orders'
 
 // Добавление таблицы с явным указанием имени
 $t4 = new TableRepository();
@@ -53,7 +53,7 @@ SELECT d.*, u.email, u.username, t.title AS tavern_title
 
 $this->tables->addTable("taverns", alias: 't'); // и получить при вызове
 
-$sql = "SELECT * FROM {$this->tables['taverns']} WHERE id = ?"; 
+$sql = "SELECT * FROM {$this->tables['taverns']} AS t WHERE id = ?"; 
 
 // SELECT * FROM taverns AS t WHERE id = ? 
 

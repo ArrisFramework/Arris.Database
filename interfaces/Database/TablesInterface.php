@@ -6,9 +6,7 @@ interface TablesInterface
 {
     public function __construct(
         string $prefix = '',
-        array $tables = [],
-        array $havePrefix = [],
-        array $haveAlias = []
+        array $tables = []
     );
 
     public function addTable(
