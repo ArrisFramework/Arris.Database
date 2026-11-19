@@ -899,4 +899,107 @@ class QueryBuilderTest extends TestCase
             ->from('users')
             ->data(['name' => 'test']);
     }
+
+    // ==================== Regression Tests ====================
+
+    public function testOrWhereShortForm(): void
+    {
+        $sql = $this->qb->select()
+            ->from('users')
+            ->where('role', 'admin')
+            ->orWhere('role', 'moderator')
+            ->toSQL();
+
+        $this->assertEquals('SELECT * FROM users WHERE role = ? OR role = ?', $sql);
+        $this->assertEquals(['admin', 'moderator'], $this->qb->getBindings());
+    }
+
+    public function testJoinShortForm(): void
+    {
+        $sql = $this->qb->select()
+            ->from('users')
+            ->join('orders', 'users.id', 'orders.user_id')
+            ->toSQL();
+
+        $this->assertStringContainsString('INNER JOIN orders ON users.id = orders.user_id', $sql);
+    }
+
+    public function testWhereWithoutValueThrows(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        $this->qb->select()->from('users')->where('id');
+    }
+
+    public function testMixedUnionKeepsPerUnionKeyword(): void
+    {
+        $union = new QueryBuilder($this->connector);
+        $unionAll = new QueryBuilder($this->connector);
+
+        $sql = $this->qb->select()
+            ->from('a')
+            ->union($union->select()->from('b'))
+            ->unionAll($unionAll->select()->from('c'))
+            ->toSQL();
+
+        $this->assertStringContainsString('UNION SELECT * FROM b', $sql);
+        $this->assertStringContainsString('UNION ALL SELECT * FROM c', $sql);
+    }
+
+    public function testLimitAndOffsetAreCompiledAfterUnion(): void
+    {
+        $union = new QueryBuilder($this->connector);
+
+        $sql = $this->qb->select()
+            ->from('a')
+            ->limit(5)
+            ->offset(1)
+            ->union($union->select()->from('b'))
+            ->toSQL();
+
+        $positionUnion = strpos($sql, 'UNION');
+        $positionLimit = strpos($sql, 'LIMIT');
+        $positionOffset = strpos($sql, 'OFFSET');
+
+        $this->assertNotFalse($positionUnion);
+        $this->assertNotFalse($positionLimit);
+        $this->assertNotFalse($positionOffset);
+        $this->assertGreaterThan($positionUnion, $positionLimit);
+        $this->assertGreaterThan($positionLimit, $positionOffset);
+    }
+
+    public function testMultipleHaving(): void
+    {
+        $sql = $this->qb->select()
+            ->from('t')
+            ->groupBy('x')
+            ->having('a', '>', 1)
+            ->orHaving('b', '<', 2)
+            ->toSQL();
+
+        $this->assertEquals('SELECT * FROM t GROUP BY x HAVING a > ? OR b < ?', $sql);
+        $this->assertEquals([1, 2], $this->qb->getBindings());
+    }
+
+    public function testFirstDoesNotMutateBuilderState(): void
+    {
+        $this->connector->method('prepare')->willReturn($this->statement);
+        $this->statement->method('execute')->willReturn(true);
+        $this->statement->method('fetch')->willReturn(['id' => 1]);
+
+        $this->qb->select()->from('users')->first();
+
+        $this->assertStringNotContainsString('LIMIT', $this->qb->toSQL());
+    }
+
+    public function testCountDoesNotMutateColumns(): void
+    {
+        $this->connector->method('prepare')->willReturn($this->statement);
+        $this->statement->method('execute')->willReturn(true);
+        $this->statement->method('fetch')->willReturn(['aggregate' => 2]);
+
+        $this->qb->select('id')->from('users')->count();
+
+        $this->assertSame('SELECT id FROM users', $this->qb->toSQL());
+    }
 }

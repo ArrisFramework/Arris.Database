@@ -19,7 +19,6 @@
     <source>
         <include>
             <directory>sources</directory>
-            <directory>interfaces</directory>
         </include>
     </source>
 </phpunit>

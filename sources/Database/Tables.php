@@ -4,7 +4,7 @@ namespace Arris\Database;
 
 use InvalidArgumentException;
 
-class Tables implements \ArrayAccess, TablesInterface
+class Tables implements \ArrayAccess
 {
     private string $prefix;
 
@@ -25,21 +25,30 @@ class Tables implements \ArrayAccess, TablesInterface
 
     /**
      * @param string $prefix
-     * @param array  $tables Скалярный список ['users', 'posts']
-     *                       или ассоциативный ['users' => 'users_table']
+     * @param array  $tables     Скалярный список ['users', 'posts']
+     *                           или ассоциативный ['users' => 'users_table']
+     * @param array  $havePrefix Ключи таблиц, к которым нужно добавить префикс
+     * @param array  $haveAlias  ['key' => 'alias']
      */
-    public function __construct(string $prefix = '', array $tables = [])
-    {
+    public function __construct(
+        string $prefix = '',
+        array $tables = [],
+        array $havePrefix = [],
+        array $haveAlias = []
+    ) {
         $this->prefix = $prefix;
 
         foreach ($tables as $key => $value) {
-            if (is_int($key)) {
-                // ['users', 'posts'] — ключ = значение = имя таблицы
-                $this->addTable($value, $value);
-            } else {
-                // ['users' => 'users_table']
-                $this->addTable($key, $value);
-            }
+            $name = is_int($key) ? (string)$value : (string)$key;
+            $tableName = (string)$value;
+
+            $this->addTable(
+                $name,
+                $tableName,
+                null,
+                in_array($name, $havePrefix, true),
+                $haveAlias[$name] ?? null
+            );
         }
     }
 

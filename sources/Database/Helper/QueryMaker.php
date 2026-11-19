@@ -2,155 +2,125 @@
 
 namespace Arris\Database\Helper;
 
-use Arris\Database\QueryMakerInterface;
 use InvalidArgumentException;
 use stdClass;
 
-class QueryMaker implements QueryMakerInterface
+class QueryMaker
 {
     /**
-     * Build UPDATE query by dataset for given table
+     * Build UPDATE query by dataset for given table.
      *
-     * @param string $table
-     * @param $dataset
-     * @param $where_condition
-     * @param bool $pretty
-     * @return string
+     * ВНИМАНИЕ: значения WHERE подставляются как есть. Для пользовательских
+     * данных используйте buildUpdateQuery().
+     *
+     * @throws \JsonException
      */
-    public static function makeUpdateQuery(string $table, &$dataset, $where_condition, bool $pretty = true):string
+    public static function makeUpdateQuery(string $table, &$dataset, $where_condition, bool $pretty = true): string
     {
         if (empty($dataset)) {
             throw new InvalidArgumentException(__METHOD__ . " => Dataset cannot be empty");
         }
 
+        $nl = $pretty ? "\r\n" : '';
         $set = [];
-        $pretty = $pretty ? "\r\n" : '';
-
-        $query = "UPDATE {$table} SET";
 
         foreach ($dataset as $index => $value) {
-            if (\strtoupper(\trim($value)) === 'NOW()') {
-                $set[] = "{$pretty} {$index} = NOW()";
-                unset($dataset[ $index ]);
-                continue;
-            }
+            $expression = self::sqlExpression($value);
 
-            if (\strtoupper(\trim($value)) === 'UUID()') {
-                $set[] = "{$pretty} {$index} = UUID()";
+            if ($expression !== null) {
+                $set[] = "{$nl} {$index} = {$expression}";
                 unset($dataset[$index]);
                 continue;
             }
 
-            $set[] = "{$pretty} {$index} = :{$index}";
+            $set[] = "{$nl} {$index} = :{$index}";
+            $dataset[$index] = self::cast($value);
         }
 
-        $query .= \implode(', ', $set);
+        $query = "UPDATE {$table} SET " . \implode(', ', $set);
 
         if (\is_array($where_condition)) {
             $where_condition = \key($where_condition) . ' = ' . \current($where_condition);
         }
 
-        if (\is_string($where_condition ) && !\strpos($where_condition, 'WHERE')) {
+        if (\is_string($where_condition) && !self::hasWhereKeyword($where_condition)) {
             $where_condition = " WHERE {$where_condition} ";
         }
 
-        if (\is_null($where_condition)) {
+        if ($where_condition === null) {
             $where_condition = '';
         }
 
-        $query .= " {$pretty} {$where_condition} ;";
-
-        return $query;
+        return $query . " {$nl} {$where_condition} ;";
     }
 
     /**
-     * Возвращает SQL INSERT запрос, модифицирует переданный датасет.
-     * Так,
+     * Возвращает SQL INSERT и модифицирует переданный датасет
+     * (выражения NOW()/UUID() удаляются, остальные значения кастятся).
      *
-     * @param string $table
-     * @param $dataset
-     * @param bool $pretty
+     * MySQL-специфичный синтаксис INSERT ... SET. Для переносимого
+     * варианта используйте buildInsertQuery().
      *
-     * @return string
      * @throws \JsonException
      */
-    public static function makeInsertQuery(string $table, &$dataset, bool $pretty = true):string
+    public static function makeInsertQuery(string $table, &$dataset, bool $pretty = true): string
     {
         if (empty($dataset)) {
-            return "INSERT INTO {$table} () VALUES (); ";
+            throw new InvalidArgumentException(__METHOD__ . " => Dataset cannot be empty");
         }
 
-        $pretty = $pretty ? "\r\n" : '';
-
-        $insert_fields = [];
-
-        $query = "INSERT INTO {$table} SET ";
+        $nl = $pretty ? "\r\n" : '';
+        $fields = [];
 
         foreach ($dataset as $index => $value) {
-            if (\strtoupper(\trim($value)) === 'NOW()') {
-                $insert_fields[] = "{$pretty} {$index} = NOW()";
-                unset($dataset[ $index ]);
-                continue;
-            }
+            $expression = self::sqlExpression($value);
 
-            if (\strtoupper(\trim($value)) === 'UUID()') {
-                $insert_fields[] = "{$pretty} {$index} = UUID()";
+            if ($expression !== null) {
+                $fields[] = "{$nl} {$index} = {$expression}";
                 unset($dataset[$index]);
                 continue;
             }
 
-            $insert_fields[] = "{$pretty} {$index} = :{$index}";
-
+            $fields[] = "{$nl} {$index} = :{$index}";
             $dataset[$index] = self::cast($value);
         }
 
-        $query .= \implode(', ', $insert_fields) . ' ;';
-
-        return $query;
+        return "INSERT INTO {$table} SET " . \implode(', ', $fields) . ' ;';
     }
 
     /**
-     * @param string $table
-     * @param array $dataset
-     * @param string $where
-     * @param bool $pretty
-     * @return string
+     * MySQL-специфичный REPLACE ... SET.
+     *
+     * @throws \JsonException
      */
     public static function makeReplaceQuery(string $table, array &$dataset, string $where = '', bool $pretty = true): string
     {
         if (empty($dataset)) {
             throw new InvalidArgumentException(__METHOD__ . " => Dataset cannot be empty");
         }
+
+        $nl = $pretty ? "\r\n" : '';
         $fields = [];
 
-        $pretty = $pretty ? "\r\n" : '';
-
-        $query = "REPLACE {$table} SET ";
-
         foreach ($dataset as $index => $value) {
-            if (\strtoupper(\trim($value)) === 'NOW()') {
-                $fields[] = "{$index} = NOW()";
-                unset($dataset[ $index ]);
-                continue;
-            }
+            $expression = self::sqlExpression($value);
 
-            if (\strtoupper(\trim($value)) === 'UUID()') {
-                $fields[] = " {$index} = UUID() ";
+            if ($expression !== null) {
+                $fields[] = "{$index} = {$expression}";
                 unset($dataset[$index]);
                 continue;
             }
 
             $fields[] = " {$index} = :{$index} ";
+            $dataset[$index] = self::cast($value);
         }
 
-        $query .= \implode(', ', $fields);
-
-        $query .= " {$pretty} {$where} ;";
-
-        return $query;
+        return "REPLACE {$table} SET " . \implode(', ', $fields) . " {$nl} {$where} ;";
     }
 
     /**
+     * Переносимый INSERT: named placeholders, значения возвращаются отдельно.
+     *
      * @throws \JsonException
      */
     public static function buildInsertQuery(string $table, array &$dataset): stdClass
@@ -165,13 +135,17 @@ class QueryMaker implements QueryMakerInterface
         $params = [];
 
         foreach ($dataset as $column => $value) {
-            $param = ':' . $column;
             $columns[] = $column;
+
+            $expression = self::sqlExpression($value);
+            if ($expression !== null) {
+                $placeholders[] = $expression;
+                continue;
+            }
+
+            $param = ':' . $column;
             $placeholders[] = $param;
-
-            $value = self::cast($value);
-
-            $params[$param] = $value;
+            $params[$param] = self::cast($value);
         }
 
         $result->query = sprintf(
@@ -186,6 +160,8 @@ class QueryMaker implements QueryMakerInterface
     }
 
     /**
+     * Переносимый UPDATE: set- и where-параметры получают разные префиксы.
+     *
      * @throws \JsonException
      */
     public static function buildUpdateQuery(string $table, array &$dataset, array &$whereConditions): stdClass
@@ -197,22 +173,25 @@ class QueryMaker implements QueryMakerInterface
         $result = new stdClass();
         $params = [];
 
-        // Формируем SET часть
         $setParts = [];
         foreach ($dataset as $column => $value) {
+            $expression = self::sqlExpression($value);
+
+            if ($expression !== null) {
+                $setParts[] = "$column = $expression";
+                continue;
+            }
+
             $param = ':set_' . $column;
             $setParts[] = "$column = $param";
-            $value = self::cast($value);
-            $params[$param] = $value;
+            $params[$param] = self::cast($value);
         }
 
-        // Формируем WHERE часть
         $whereParts = [];
         foreach ($whereConditions as $column => $value) {
             $param = ':where_' . $column;
             $whereParts[] = "$column = $param";
-            $value = self::cast($value);
-            $params[$param] = $value;
+            $params[$param] = self::cast($value);
         }
 
         $result->query = sprintf(
@@ -233,36 +212,29 @@ class QueryMaker implements QueryMakerInterface
      * $update_statement = $sphinx->prepare($update_query);
      * $update_statement->execute($newdataset);
      *
-     *
      * @param string $table         -- имя таблицы
-     * @param array $dataset        -- сет данных
-     * @param array $mva_attributes -- массив с именами ключей MVA-атрибутов (они вставятся как значения, а не как placeholder-ы)
-     * @return stdClass             -- Класс, query -> запрос, dataset -> сет данных, очищенный от MVA-атрибутов.
+     * @param array  $dataset       -- сет данных
+     * @param array  $mva_attributes-- имена MVA-атрибутов (вставляются значениями)
+     * @return stdClass             -- query + dataset без MVA-атрибутов
      */
-    public static function buildReplaceQueryMVA(string $table, array $dataset, array $mva_attributes):stdClass
+    public static function buildReplaceQueryMVA(string $table, array $dataset, array $mva_attributes): stdClass
     {
         if (empty($dataset)) {
             throw new InvalidArgumentException(__METHOD__ . " => Dataset cannot be empty");
         }
 
-        $query = "REPLACE INTO {$table} (";
-
         $dataset_keys = \array_keys($dataset);
 
-        $query .= \implode(', ', \array_map( static function ($i){
-            return "{$i}";
-        }, $dataset_keys));
-
+        $query = "REPLACE INTO {$table} (";
+        $query .= \implode(', ', $dataset_keys);
         $query .= " ) VALUES ( ";
-
-        $query .= \implode(', ', \array_map(static function ($i) use ($mva_attributes, $dataset){
-            return \in_array($i, $mva_attributes) ? "({$dataset[$i]})" : ":{$i}";
+        $query .= \implode(', ', \array_map(static function ($i) use ($mva_attributes, $dataset) {
+            return \in_array($i, $mva_attributes, true) ? "({$dataset[$i]})" : ":{$i}";
         }, $dataset_keys));
-
         $query .= " ) ";
 
         $new_dataset = \array_filter($dataset, static function ($value, $key) use ($mva_attributes) {
-            return !\in_array($key, $mva_attributes);
+            return !\in_array($key, $mva_attributes, true);
         }, ARRAY_FILTER_USE_BOTH);
 
         $result = new stdClass();
@@ -273,26 +245,43 @@ class QueryMaker implements QueryMakerInterface
     }
 
     /**
-     * Преобразует переменную к типу, пригодному для вставки в SQL
-     * 
-     * @param mixed $value
+     * Преобразует значение к виду, пригодному для PDO-параметра.
      *
-     * @return mixed
+     * null остаётся null (SQL NULL), а не строкой 'NULL'.
+     *
      * @throws \JsonException
      */
-    public static function cast(mixed $value):mixed
+    public static function cast(mixed $value): mixed
     {
-        return match(gettype($value)) {
-            "NULL"      =>  'NULL',                          // NULL в SQL
-            'boolean'   =>  (int)$value,                     // true→1, false→0
-            'double'    =>  (string)$value,                  // float → string для безопасности
-            'array'     =>  json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
-            'object'    =>  json_encode((array)$value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
-            'resource'  =>  (string)$value,                  // или null
-            'resource (closed)' => 'NULL',                  // закрытый ресурс
-            default     => $value
+        return match (gettype($value)) {
+            'NULL'              => null,
+            'boolean'           => (int)$value,
+            'double'            => (string)$value,
+            'array'             => json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+            'object'            => json_encode((array)$value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+            'resource'          => null,
+            'resource (closed)' => null,
+            default             => $value,
         };
     }
 
+    /**
+     * NOW()/UUID() распознаются только как строки; для прочих типов — null,
+     * чтобы не вызывать trim(array) и подобные TypeError.
+     */
+    private static function sqlExpression(mixed $value): ?string
+    {
+        if (!\is_string($value)) {
+            return null;
+        }
 
+        $normalized = \strtoupper(\trim($value));
+
+        return \in_array($normalized, ['NOW()', 'UUID()'], true) ? $normalized : null;
+    }
+
+    private static function hasWhereKeyword(string $condition): bool
+    {
+        return \preg_match('/\bWHERE\b/i', $condition) === 1;
+    }
 }

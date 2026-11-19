@@ -28,7 +28,7 @@
     },
     "autoload": {
         "psr-4": {
-            "Arris\\": ["sources", "interfaces"],
+            "Arris\\": "sources",
             "Tests\\": "tests"
         }
     }

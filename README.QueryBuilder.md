@@ -10,7 +10,7 @@ NB: Класс сгенерирован моделью Claude Sonnet 4.5
 use Arris\Database\Helper\QueryBuilder;
 use Arris\Database\Connector;
 
-$connector = new Connector($pdo);
+$connector = (new Config([...]))->connect();
 $qb = QueryBuilder::create($connector);
 
 // Простой SELECT

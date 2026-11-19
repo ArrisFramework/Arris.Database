@@ -2,26 +2,25 @@
 
 namespace Arris\Database;
 
-class Stats implements StatsInterface
+class Stats
 {
-    private ?Config $config;
+    public const ROUND_PRECISION = 8;
 
+    private ?float $slowQueryThreshold;
+    private float $totalQueryTime = 0.0;
     private int $queryCount = 0;
     private int $preparedQueryCount = 0;
-
-    private float $totalQueryTime = 0.0;
-    private float $totalQueryCount = 0;
+    private int $maxStoredQueries;
 
     private array $queries = [];
     private array $slowQueries = [];
 
-    private float $slowQueryThreshold;
     private float $initTimestamp;
 
-    public function __construct(Config $config)
+    public function __construct(private readonly Config $config)
     {
-        $this->config = $config;
         $this->slowQueryThreshold = $config->slowQueryThreshold;
+        $this->maxStoredQueries = max(0, $config->maxStoredQueries);
         $this->initTimestamp = microtime(true);
     }
 
@@ -37,7 +36,6 @@ class Stats implements StatsInterface
         }
 
         $this->totalQueryTime += $duration;
-        $this->totalQueryCount++;
 
         $backtrace = [];
 
@@ -48,11 +46,10 @@ class Stats implements StatsInterface
             }
 
             $backtrace = [
-                'file'      =>  $trace['file'] ?? __FILE__,
-                'line'      =>  $trace['line'] ?? __LINE__,
-                'function'  =>  $trace['function'] ?? __METHOD__
+                'file'     => $trace['file'] ?? __FILE__,
+                'line'     => $trace['line'] ?? __LINE__,
+                'function' => $trace['function'] ?? __METHOD__,
             ];
-
         }
 
         $queryData = [
@@ -62,13 +59,15 @@ class Stats implements StatsInterface
             'params'    => $params ?? [],
             'duration'  => $duration,
             'timestamp' => $endTime - $this->initTimestamp,
-            'backtrace' => $backtrace
+            'backtrace' => $backtrace,
         ];
-        $this->queries[] = $queryData;
 
-        // Запись медленного запроса
-        if ($duration >= $this->slowQueryThreshold) {
+        $this->queries[] = $queryData;
+        $this->trim($this->queries);
+
+        if ($this->slowQueryThreshold !== null && $duration >= $this->slowQueryThreshold) {
             $this->slowQueries[] = $queryData;
+            $this->trim($this->slowQueries);
         }
     }
 
@@ -94,26 +93,22 @@ class Stats implements StatsInterface
 
     public function getQueries(): array
     {
-        return array_map(function ($row) {
-            $row['duration'] = number_format($row['duration'], self::ROUND_PRECISION);
-            return $row;
-        }, $this->queries);
+        return $this->formatRows($this->queries);
     }
 
-    public function getSlowQueries():array
+    public function getSlowQueries(): array
     {
-        return array_map(function ($row) {
-            $row['duration'] = number_format($row['duration'], self::ROUND_PRECISION);
-            return $row;
-        }, $this->slowQueries);
+        return $this->formatRows($this->slowQueries);
     }
 
     public function getLastQuery(): ?array
     {
         $row = end($this->queries) ?: null;
-        if ($row && array_key_exists('duration', $row)) {
+
+        if ($row !== null && array_key_exists('duration', $row)) {
             $row['duration'] = number_format($row['duration'], self::ROUND_PRECISION);
         }
+
         return $row;
     }
 
@@ -121,23 +116,31 @@ class Stats implements StatsInterface
     {
         $this->queryCount = 0;
         $this->preparedQueryCount = 0;
-        $this->totalQueryCount = 0;
         $this->totalQueryTime = 0.0;
         $this->queries = [];
         $this->slowQueries = [];
         $this->slowQueryThreshold = $this->config->slowQueryThreshold;
+        $this->maxStoredQueries = max(0, $this->config->maxStoredQueries);
         $this->initTimestamp = microtime(true);
     }
 
-    /**
-     * @param $time (float|string|int)
-     * @param int $decimals
-     * @param string $decimal_separator
-     * @param string $thousands_separator
-     * @return string
-     */
     public static function formatTime($time = 0, int $decimals = 6, string $decimal_separator = '.', string $thousands_separator = ''): string
     {
         return \number_format($time, $decimals, $decimal_separator, $thousands_separator);
+    }
+
+    private function formatRows(array $rows): array
+    {
+        return array_map(static function (array $row): array {
+            $row['duration'] = number_format($row['duration'], self::ROUND_PRECISION);
+            return $row;
+        }, $rows);
+    }
+
+    private function trim(array &$rows): void
+    {
+        if ($this->maxStoredQueries > 0 && count($rows) > $this->maxStoredQueries) {
+            array_shift($rows);
+        }
     }
 }

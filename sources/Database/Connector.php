@@ -2,134 +2,93 @@
 
 namespace Arris\Database;
 
+use Arris\Database\Drivers\DriverFactory;
+use Arris\Database\Drivers\DriverInterface;
 use Arris\Database\Helper\QueryBuilder;
 use PDO;
 use PDOException;
 use PDOStatement;
-use RuntimeException;
+use Throwable;
 
-class Connector extends PDO implements ConnectorInterface
+/**
+ * Ленивая обёртка над PDO.
+ *
+ * Соединение не создаётся в конструкторе: PDO появляется при первом
+ * обращении к БД. Поэтому класс НЕ наследует PDO — у PDO нельзя
+ * отложить инициализацию (см. историю 3.0).
+ */
+class Connector
 {
-    private ?PDO $pdo_connector = null;
-    private ?Config $config;
-    private ?Stats $stats;
-    public  Tables $tables;
+    private ?PDO $pdo = null;
+    private ?DriverInterface $driver = null;
+    private Stats $stats;
 
-    private string $dsn;
-    private ?string $username;
-    private ?string $password;
-    private ?array $options;
-
+    public Tables $tables;
     public bool $is_connected = false;
 
-    public function __construct(
-        Config $config
-    ) {
-        $this->config = $config;
-        $this->dsn = $config->getDSN();
-        $this->username = $config->getUsername();
-        $this->password = $config->getPassword();
-        $this->options = $config->getOptions() ?? [];
+    public function __construct(private readonly Config $config)
+    {
         $this->stats = new Stats($config);
         $this->tables = $config->tables;
     }
 
     /**
-     * Real init connection
-     *
-     * @return void
+     * Возвращает (при необходимости создаёт) реальное соединение.
      */
-    private function initConnection(): void
+    private function connection(): PDO
     {
-        switch ($this->config->driver) {
-            case Config::DRIVER_SQLITE: {
-                $dsl = \sprintf("sqlite:%s", realpath($this->config->hostname));
-                $this->pdo_connector = new PDO($dsl);
-
-                break;
-            }
-
-            case Config::DRIVER_MYSQL: {
-                $this->pdo_connector = new PDO(
-                    $this->dsn,
-                    $this->username,
-                    $this->password,
-                    $this->options
-                );
-
-                $sql_collate = "SET NAMES {$this->config->charset}";
-
-                if ($this->config->charset_collation) {
-                    $sql_collate .= " COLLATE {$this->config->charset_collation}";
-                }
-                $this->pdo_connector->exec($sql_collate);
-
-                break;
-            }
-            case Config::DRIVER_PGSQL: {
-                $this->pdo_connector = new PDO(
-                    $this->dsn,
-                    $this->username,
-                    $this->password,
-                    $this->options
-                );
-
-                break;
-            }
-            default: {
-                throw new RuntimeException('Unknown database driver : ' . $this->config->driver);
-            }
+        if ($this->pdo !== null) {
+            return $this->pdo;
         }
 
+        // initTables() мог быть вызван уже после создания коннектора
+        $this->tables = $this->config->tables;
 
-        $this->pdo_connector->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
-        $this->pdo_connector->setAttribute(\PDO::ATTR_DEFAULT_FETCH_MODE, \PDO::FETCH_ASSOC);
-        $this->pdo_connector->setAttribute(\PDO::ATTR_CASE, \PDO::CASE_LOWER);
+        $this->driver = DriverFactory::make($this->config);
 
+        $pdo = $this->driver->connect();
+
+        // PDO сам будет создавать Arris\Database\Statement с уже
+        // инициализированным внутренним состоянием.
+        $pdo->setAttribute(PDO::ATTR_STATEMENT_CLASS, [Statement::class, [$this->stats]]);
+
+        $this->pdo = $pdo;
         $this->is_connected = true;
+
+        return $pdo;
     }
 
     /**
-     * Check real connection
-     * @return void
+     * Публичный доступ к реальному PDO с форсированием lazy-коннекта.
      */
-    private function ensureConnection(): void
+    public function pdo(): PDO
     {
-        if (empty($this->pdo_connector)) {
-            $this->initConnection();
-        }
+        return $this->connection();
     }
 
     public function prepare(string $query, array $options = []): PDOStatement|false
     {
-        $this->ensureConnection();
-        $statement = $this->pdo_connector->prepare($query, $options);
-
-        if ($statement === false) {
-            return false;
-        }
-
-        return new Statement($statement, $query, $this->stats);
-    }
-
-    /**
-     * @param $query
-     * @param int $fetchMode
-     * @param ...$fetchModeArgs
-     * @return PDOStatement|false
-     */
-    public function query($query, $fetchMode = PDO::ATTR_DEFAULT_FETCH_MODE, ...$fetchModeArgs): PDOStatement|false
-    {
-        $this->ensureConnection();
-
         $startTime = microtime(true);
 
         try {
-            if (func_num_args() === 1) {
-                $result = $this->pdo_connector->query($query);
-            } else {
-                $result = $this->pdo_connector->query($query, $fetchMode, ...$fetchModeArgs);
-            }
+            return $this->connection()->prepare($query, $options);
+        } catch (PDOException $e) {
+            $this->stats->recordQuery('prepare', $query, null, $startTime, true);
+            throw $e;
+        }
+    }
+
+    public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): PDOStatement|false
+    {
+        $pdo = $this->connection();
+        $startTime = microtime(true);
+
+        try {
+            // PDO::query() создаёт statement, но не вызывает PHP-override
+            // execute(), поэтому статистику пишем здесь.
+            $result = $fetchMode === null
+                ? $pdo->query($query)
+                : $pdo->query($query, $fetchMode, ...$fetchModeArgs);
 
             $this->stats->recordQuery('query', $query, null, $startTime);
 
@@ -140,17 +99,13 @@ class Connector extends PDO implements ConnectorInterface
         }
     }
 
-    /**
-     * @param string $statement
-     * @return int|false
-     */
     public function exec(string $statement): int|false
     {
-        $this->ensureConnection();
+        $pdo = $this->connection();
         $startTime = microtime(true);
 
         try {
-            $result = $this->pdo_connector->exec($statement);
+            $result = $pdo->exec($statement);
             $this->stats->recordQuery('exec', $statement, null, $startTime);
             return $result;
         } catch (PDOException $e) {
@@ -159,92 +114,112 @@ class Connector extends PDO implements ConnectorInterface
         }
     }
 
-    /**
-     * @return bool
-     */
     public function beginTransaction(): bool
     {
-        $this->ensureConnection();
-        return $this->pdo_connector->beginTransaction();
+        return $this->connection()->beginTransaction();
     }
 
-    /**
-     * @return bool
-     */
     public function commit(): bool
     {
-        $this->ensureConnection();
-        $this->stats->recordQuery('commit', '', null, microtime(true));
-        return $this->pdo_connector->commit();
-    }
-
-    /**
-     * @return string|null
-     */
-    public function errorCode(): ?string
-    {
-        $this->ensureConnection();
-        return $this->pdo_connector->errorCode() ?: null;
-    }
-
-    /**
-     * @return array
-     */
-    public function errorInfo(): array
-    {
-        $this->ensureConnection();
-        return $this->pdo_connector->errorInfo();
-    }
-
-    public function getAttribute(int $attribute): mixed
-    {
-        $this->ensureConnection();
-        return $this->pdo_connector->getAttribute($attribute);
-    }
-
-    public function inTransaction(): bool
-    {
-        $this->ensureConnection();
-        return $this->pdo_connector->inTransaction();
-    }
-
-    public function lastInsertId(?string $name = null): string|false
-    {
-        $this->ensureConnection();
-        return $this->pdo_connector->lastInsertId($name);
-    }
-
-    public function quote(string $string, int $type = PDO::PARAM_STR): string|false
-    {
-        $this->ensureConnection();
-        return $this->pdo_connector->quote($string, $type);
+        return $this->connection()->commit();
     }
 
     public function rollBack(): bool
     {
-        $this->ensureConnection();
-        return $this->pdo_connector->rollBack();
+        return $this->connection()->rollBack();
+    }
+
+    public function inTransaction(): bool
+    {
+        return $this->connection()->inTransaction();
+    }
+
+    /**
+     * Выполняет callback внутри транзакции с автоматическим rollback при ошибке.
+     */
+    public function transaction(callable $callback): mixed
+    {
+        // Уже внутри транзакции — не создаём вложенную (savepoints пока нет).
+        if ($this->inTransaction()) {
+            return $callback($this);
+        }
+
+        $this->beginTransaction();
+
+        try {
+            $result = $callback($this);
+            $this->commit();
+            return $result;
+        } catch (Throwable $e) {
+            if ($this->inTransaction()) {
+                $this->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    public function errorCode(): ?string
+    {
+        return $this->connection()->errorCode() ?: null;
+    }
+
+    public function errorInfo(): array
+    {
+        return $this->connection()->errorInfo();
+    }
+
+    public function getAttribute(int $attribute): mixed
+    {
+        return $this->connection()->getAttribute($attribute);
     }
 
     public function setAttribute(int $attribute, mixed $value): bool
     {
-        $this->ensureConnection();
-        return $this->pdo_connector->setAttribute($attribute, $value);
+        return $this->connection()->setAttribute($attribute, $value);
     }
 
-    public function stats():Stats
+    public function lastInsertId(?string $name = null): string|false
+    {
+        return $this->driver()->lastInsertId($this->connection(), $name);
+    }
+
+    public function quote(string $string, int $type = PDO::PARAM_STR): string|false
+    {
+        return $this->connection()->quote($string, $type);
+    }
+
+    public function stats(): Stats
     {
         return $this->stats;
     }
 
-    public function metrics():Stats
+    public function metrics(): Stats
     {
         return $this->stats;
     }
 
+    public function driver(): DriverInterface
+    {
+        return $this->driver ??= DriverFactory::make($this->config);
+    }
+
+    /**
+     * Текущий PDO-хэндл без принудительного соединения.
+     */
     public function getPDOConnector(): ?PDO
     {
-        return $this->pdo_connector;
+        return $this->pdo;
+    }
+
+    public function isConnected(): bool
+    {
+        return $this->pdo !== null;
+    }
+
+    public function disconnect(): void
+    {
+        $this->pdo = null;
+        $this->is_connected = false;
     }
 
     public function builder(): QueryBuilder

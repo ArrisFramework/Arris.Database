@@ -22,13 +22,16 @@ class QueryBuilder
     private array $values = [];
     private array $orderBy = [];
     private array $groupBy = [];
-    private ?string $having = null;
+    private array $havings = [];
     private array $havingBindings = [];
     private ?int $limit = null;
     private ?int $offset = null;
     private bool $distinct = false;
+
+    /**
+     * @var array<int, array{query: self, all: bool}>
+     */
     private array $unions = [];
-    private bool $isUnionAll = false;
 
     public function __construct(
         private readonly Connector $connector
@@ -160,6 +163,10 @@ class QueryBuilder
             $operator = '=';
         }
 
+        if ($operator === null) {
+            throw new InvalidArgumentException('where() requires a value, or an operator and a value');
+        }
+
         $this->wheres[] = [
             'type' => 'basic',
             'column' => $column,
@@ -177,6 +184,15 @@ class QueryBuilder
      */
     public function orWhere(string|Closure $column, mixed $operator = null, mixed $value = null): self
     {
+        if ($column instanceof Closure) {
+            return $this->whereGroup($column, 'OR');
+        }
+
+        if (func_num_args() === 2) {
+            $value = $operator;
+            $operator = '=';
+        }
+
         return $this->where($column, $operator, $value, 'OR');
     }
 
@@ -296,9 +312,14 @@ class QueryBuilder
      */
     private function addJoin(string $type, string $table, string $first, ?string $operator, ?string $second): self
     {
-        if (func_num_args() === 4) {
+        // join($table, $first, $second) — оператор по умолчанию '='
+        if ($second === null) {
             $second = $operator;
             $operator = '=';
+        }
+
+        if ($second === null) {
+            throw new InvalidArgumentException('JOIN requires a second column, or an operator and a second column');
         }
 
         $this->joins[] = [
@@ -373,10 +394,37 @@ class QueryBuilder
     /**
      * HAVING
      */
-    public function having(string $column, string $operator, mixed $value): self
+    public function having(string $column, string $operator, mixed $value, string $boolean = 'AND'): self
     {
-        $this->having = "$column $operator ?";
+        $this->havings[] = [
+            'type' => 'basic',
+            'column' => $column,
+            'operator' => $operator,
+            'boolean' => $boolean,
+        ];
         $this->havingBindings[] = $value;
+        return $this;
+    }
+
+    /**
+     * OR HAVING
+     */
+    public function orHaving(string $column, string $operator, mixed $value): self
+    {
+        return $this->having($column, $operator, $value, 'OR');
+    }
+
+    /**
+     * HAVING с raw SQL
+     */
+    public function havingRaw(string $sql, array $bindings = [], string $boolean = 'AND'): self
+    {
+        $this->havings[] = [
+            'type' => 'raw',
+            'sql' => $sql,
+            'boolean' => $boolean,
+        ];
+        $this->havingBindings = [...$this->havingBindings, ...$bindings];
         return $this;
     }
 
@@ -426,8 +474,7 @@ class QueryBuilder
      */
     public function union(self $query, bool $all = false): self
     {
-        $this->unions[] = $query;
-        $this->isUnionAll = $all;
+        $this->unions[] = ['query' => $query, 'all' => $all];
         return $this;
     }
 
@@ -518,9 +565,30 @@ class QueryBuilder
             $parts[] = 'GROUP BY ' . implode(', ', $this->groupBy);
         }
 
-        if ($this->having) {
-            $parts[] = 'HAVING ' . $this->having;
+        if (!empty($this->havings)) {
+            $havingParts = [];
+
+            foreach ($this->havings as $index => $having) {
+                $boolean = $index > 0 ? "{$having['boolean']} " : '';
+
+                $havingParts[] = $having['type'] === 'raw'
+                    ? $boolean . $having['sql']
+                    : sprintf('%s%s %s ?', $boolean, $having['column'], $having['operator']);
+            }
+
+            $parts[] = 'HAVING ' . implode(' ', $havingParts);
             $bindings = [...$bindings, ...$this->havingBindings];
+        }
+
+        // UNION-ы идут до ORDER BY/LIMIT/OFFSET: они относятся ко всему
+        // составному запросу, а не к первому SELECT.
+        if (!empty($this->unions)) {
+            foreach ($this->unions as $union) {
+                $keyword = $union['all'] ? 'UNION ALL' : 'UNION';
+                $unionCompiled = $union['query']->compile();
+                $parts[] = "$keyword {$unionCompiled['sql']}";
+                $bindings = [...$bindings, ...$unionCompiled['bindings']];
+            }
         }
 
         if (!empty($this->orderBy)) {
@@ -537,15 +605,6 @@ class QueryBuilder
 
         if ($this->offset !== null) {
             $parts[] = 'OFFSET ' . $this->offset;
-        }
-
-        if (!empty($this->unions)) {
-            foreach ($this->unions as $union) {
-                $keyword = $this->isUnionAll ? 'UNION ALL' : 'UNION';
-                $unionCompiled = $union->compile();
-                $parts[] = "$keyword {$unionCompiled['sql']}";
-                $bindings = [...$bindings, ...$unionCompiled['bindings']];
-            }
         }
 
         return [
@@ -756,8 +815,10 @@ class QueryBuilder
      */
     public function first(): ?array
     {
-        $this->limit(1);
-        $result = $this->execute()->fetch(PDO::FETCH_ASSOC);
+        $query = clone $this;
+        $query->limit(1);
+
+        $result = $query->execute()->fetch(PDO::FETCH_ASSOC);
         return $result ?: null;
     }
 
@@ -817,14 +878,11 @@ class QueryBuilder
      */
     public function exists(): bool
     {
-        $original = $this->columns;
-        $this->columns = ['1'];
-        $this->limit(1);
+        $query = clone $this;
+        $query->columns = ['1'];
+        $query->limit(1);
 
-        $result = !empty($this->get());
-
-        $this->columns = $original;
-        return $result;
+        return !empty($query->get());
     }
 
     /**
@@ -832,8 +890,10 @@ class QueryBuilder
      */
     public function count(string $column = '*'): int
     {
-        $this->columns = ["COUNT($column) as aggregate"];
-        $result = $this->first();
+        $query = clone $this;
+        $query->columns = ["COUNT($column) as aggregate"];
+
+        $result = $query->first();
         return (int)($result['aggregate'] ?? 0);
     }
 
@@ -874,8 +934,10 @@ class QueryBuilder
      */
     private function aggregate(string $function, string $column): mixed
     {
-        $this->columns = ["{$function}($column) as aggregate"];
-        $result = $this->first();
+        $query = clone $this;
+        $query->columns = ["{$function}($column) as aggregate"];
+
+        $result = $query->first();
         return $result['aggregate'] ?? null;
     }
 
@@ -895,13 +957,12 @@ class QueryBuilder
         $this->values = [];
         $this->orderBy = [];
         $this->groupBy = [];
-        $this->having = null;
+        $this->havings = [];
         $this->havingBindings = [];
         $this->limit = null;
         $this->offset = null;
         $this->distinct = false;
         $this->unions = [];
-        $this->isUnionAll = false;
 
         return $this;
     }
