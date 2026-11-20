@@ -11,13 +11,19 @@ use PDOStatement;
 use Throwable;
 
 /**
- * Ленивая обёртка над PDO.
+ * PDO-совместимый фасад над ленивым соединением.
  *
- * Соединение не создаётся в конструкторе: PDO появляется при первом
- * обращении к БД. Поэтому класс НЕ наследует PDO — у PDO нельзя
- * отложить инициализацию (см. историю 3.0).
+ * Класс наследует PDO, чтобы его можно было передавать в legacy-код,
+ * который требует аргумент `PDO $pdo`. При этом parent::__construct()
+ * НЕ вызывается: реальное PDO создаётся лениво внутри и все core-методы
+ * делегируют в него.
+ *
+ * Ограничения фасада:
+ * - driver-specific методы (sqliteCreateFunction, pgsqlCopyFromArray и т.п.)
+ *   нужно вызывать на реальном PDO: `$connector->pdo()`;
+ * - clone/serialize не поддерживаются (как и у обычного PDO).
  */
-class Connector
+class Connector extends PDO
 {
     private ?PDO $pdo = null;
     private ?DriverInterface $driver = null;
@@ -45,7 +51,6 @@ class Connector
         $this->tables = $this->config->tables;
 
         $this->driver = DriverFactory::make($this->config);
-
         $pdo = $this->driver->connect();
 
         // PDO сам будет создавать Arris\Database\Statement с уже
@@ -84,8 +89,6 @@ class Connector
         $startTime = microtime(true);
 
         try {
-            // PDO::query() создаёт statement, но не вызывает PHP-override
-            // execute(), поэтому статистику пишем здесь.
             $result = $fetchMode === null
                 ? $pdo->query($query)
                 : $pdo->query($query, $fetchMode, ...$fetchModeArgs);
@@ -139,7 +142,6 @@ class Connector
      */
     public function transaction(callable $callback): mixed
     {
-        // Уже внутри транзакции — не создаём вложенную (savepoints пока нет).
         if ($this->inTransaction()) {
             return $callback($this);
         }

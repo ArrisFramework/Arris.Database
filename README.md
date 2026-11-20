@@ -42,6 +42,25 @@ $pdo = $db->pdo();
 $pdo = $db->getPDOConnector();
 ```
 
+## Совместимость с legacy-кодом
+
+В этой ветке `Connector` наследует `PDO`, поэтому его можно передавать в
+классы, которые требуют `PDO $pdo`:
+
+```php
+final class LegacyRepository
+{
+    public function __construct(private PDO $pdo) {}
+}
+
+$repository = new LegacyRepository($config->connect()); // работает
+```
+
+При этом соединение остаётся ленивым: `parent::__construct()` не вызывается,
+а все core-методы `PDO` делегируют в реальное PDO, создаваемое при первом
+запросе. Для driver-specific методов (`sqliteCreateFunction`,
+`pgsqlCopyFromArray` и т.п.) используйте `$connector->pdo()`.
+
 ## Драйверы
 
 Работа с конкретной СУБД вынесена в `Arris\Database\Drivers\`:
